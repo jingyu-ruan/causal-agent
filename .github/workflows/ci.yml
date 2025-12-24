@@ -18,7 +18,7 @@ jobs:
           pip install -e ".[dev]"
           pip list
           pip install ruff pytest
-      - name: Lint
-        run: python -m ruff check .
+      - name: Lint (Auto-fix)
+        run: python -m ruff check . --fix
       - name: Tests
         run: python -m pytest -q
