@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-
+from typing import Any
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -26,7 +26,7 @@ def _chunk_text(text: str, chunk_size: int = 800) -> list[str]:
 class LocalRAG:
     chunks: list[str]
     vectorizer: TfidfVectorizer
-    matrix
+    matrix: Any
 
     @staticmethod
     def from_docs_dir(docs_dir: Path) -> "LocalRAG":

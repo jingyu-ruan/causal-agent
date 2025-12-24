@@ -1,7 +1,11 @@
 # app.py
 import json
 import os
+import sys
 from pathlib import Path
+
+# Add current directory to path to resolve causal_agent imports
+sys.path.insert(0, str(Path(__file__).parent))
 
 import streamlit as st
 from dotenv import load_dotenv

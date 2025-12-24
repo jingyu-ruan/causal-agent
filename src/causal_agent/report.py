@@ -1,82 +1,57 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date
+from .schemas import ExperimentContext, ExperimentPlan
 
-from causal_agent.schemas import ExperimentSpec
 
-@dataclass
-class ReportRenderer:
-    def render(self, spec: ExperimentSpec) -> str:
-        today = date.today().isoformat()
-        gms = "\n".join([f"- {m.name}: {m.definition} (direction: {m.direction})" for m in spec.guardrail_metrics]) or "- (none)"
-        risks = "\n".join([f"- {r}" for r in spec.risks]) or "- (none)"
-        qs = "\n".join([f"- {q}" for q in spec.open_questions]) or "- (none)"
-        segs = "\n".join([f"- {s}" for s in spec.inputs.segments]) or "- (none)"
+def render_report_md(ctx: ExperimentContext, plan: ExperimentPlan) -> str:
+    guardrails = "\n".join([f"- {g}" for g in plan.guardrails]) or "- (none)"
+    risks = "\n".join([f"- {r}" for r in plan.risks]) or "- (none)"
+    analysis = "\n".join([f"- {a}" for a in plan.analysis_outline]) or "- (none)"
+    metrics = "\n".join([f"- {m}" for m in plan.metric_definitions]) or "- (none)"
+    segments = "\n".join([f"- {s}" for s in ctx.segments]) if ctx.segments else "- (none provided)"
 
-        days_str = f"{spec.power.estimated_days} day(s)" if spec.power.estimated_days is not None else "N/A (traffic not provided)"
-        return f"""# Experiment Plan
+    return f"""# {plan.title}
 
-Generated: {today}
+Generated on: {date.today().isoformat()}
 
-## Title
-{spec.title}
+## 1) Goal and hypothesis
 
-## Goal
-{spec.inputs.goal}
+**Hypothesis:** {plan.hypothesis}
 
-## Hypothesis
-{spec.hypothesis}
+**Variants:**
+{chr(10).join([f"- {v}" for v in plan.variants])}
 
-## Design
-- Randomization unit: `{spec.design.randomization_unit}`
-- Population: {spec.design.population}
-- Exclusions:
-{_bullets(spec.design.exclusions)}
-- Assignment: {spec.design.assignment}
-- Ramp plan: {spec.design.ramp_plan}
-- Planned duration: {spec.design.duration_days} day(s)
+## 2) Experiment design
 
-## Metrics
-### Primary
-- Name: `{spec.primary_metric.name}`
-- Definition: {spec.primary_metric.definition}
-- Direction: {spec.primary_metric.direction}
-- Window: {spec.primary_metric.window_days} day(s)
+**Randomization:** {plan.randomization}
 
-### Guardrails
-{gms}
+**Primary metric and definitions**
+{metrics}
 
-### Segments (exploratory unless pre-registered)
-{segs}
+**Guardrails**
+{guardrails}
 
-## Power and Sample Size
-- Test: {spec.power.test}
-- Baseline rate: {spec.power.baseline_rate:.4f}
-- MDE (absolute): {spec.power.mde_abs:.4f}
-- Alpha (two-sided): {spec.power.alpha:.4f}
-- Target power: {spec.power.power:.2f}
-- Required n per group: {spec.power.n_per_group}
-- Total n: {spec.power.total_n}
-- Estimated calendar time: {days_str}
-- Notes: {spec.power.notes}
+**Suggested segments (for exploration, after the main decision)**
+{segments}
 
-## Analysis Plan
-- SRM check: {spec.analysis.srm_check}
-- Primary test: {spec.analysis.primary_test}
-- Effect reporting: {spec.analysis.effect_reporting}
-- Multiple testing: {spec.analysis.multiple_testing_note}
-- Segment policy: {spec.analysis.segment_policy}
-- Stopping rule: {spec.analysis.stopping_rule}
+## 3) Power and sample size
 
-## Risks
+- Baseline rate: {ctx.baseline_rate:.3%}
+- MDE (absolute): {ctx.mde_abs:.3%}
+- Required n per group: {plan.n_per_group}
+- Total required sample size: {plan.sample_size}
+- Estimated duration (days): {plan.estimated_duration_days} (based on eligible traffic {ctx.daily_traffic}/day)
+
+## 4) Analysis outline
+
+{analysis}
+
+## 5) Risks and mitigations
+
 {risks}
 
-## Open Questions
-{qs}
-"""
+## Notes
 
-def _bullets(xs: list[str]) -> str:
-    if not xs:
-        return "- (none)"
-    return "\n".join([f"- {x}" for x in xs])
+{ctx.notes if ctx.notes.strip() else "(none)"}
+"""

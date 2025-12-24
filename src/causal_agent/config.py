@@ -1,26 +1,22 @@
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
-from pathlib import Path
+from dotenv import load_dotenv
+
 
 @dataclass(frozen=True)
-class AppConfig:
+class Settings:
     openai_api_key: str | None
     openai_model: str
-    openai_temperature: float
-    openai_max_output_tokens: int
-    output_dir: Path
+    openai_base_url: str
+    app_title: str = "Causal Agent - Experiment Design MVP"
 
-    @staticmethod
-    def from_env() -> "AppConfig":
-        api_key = os.getenv("OPENAI_API_KEY") or None
-        model = os.getenv("OPENAI_MODEL", "deepseek-chat")
-        temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.2"))
-        max_out = int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "1200"))
-        out_dir = Path(os.getenv("CAUSAL_AGENT_OUTPUT_DIR", "out"))
-        return AppConfig(
-            openai_api_key=api_key,
-            openai_model=model,
-            openai_temperature=temperature,
-            openai_max_output_tokens=max_out,
-            output_dir=out_dir,
-        )
+
+def load_settings() -> Settings:
+    load_dotenv(override=False)
+    return Settings(
+        openai_api_key=os.getenv("OPENAI_API_KEY"),
+        openai_model=os.getenv("OPENAI_MODEL", "deepseek-chat"),
+        openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com"),
+    )
