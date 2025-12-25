@@ -5,43 +5,63 @@ A small, resume-friendly agent that turns a product experiment idea into:
 - a runnable analysis scaffold (Python)
 - a quick power + sample size estimate (two-proportion normal approximation)
 
-It works in **two modes**:
-1) **Heuristic only** (no API key needed)
-2) **AI-assisted** (set `OPENAI_API_KEY` to get a more tailored plan)
+## Architecture
 
-## Quickstart (local)
+- **Backend**: FastAPI (Python)
+- **Frontend**: Next.js 14 + Shadcn UI (TypeScript)
+- **Core Logic**: Pydantic + Scipy (Shared with legacy app)
 
+## Quickstart
+
+### 1. Prerequisites
+- Python 3.10+
+- Node.js 18+
+
+### 2. Setup Backend
 ```bash
 python -m venv .venv
 # Windows: .venv\Scripts\activate
-source .venv/bin/activate
+# Linux/Mac: source .venv/bin/activate
 
 pip install -r requirements.txt
 pip install -e .
-streamlit run streamlit_app.py
 ```
+
+### 3. Setup Frontend
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+### 4. Run the App
+**Windows**: Double-click `start.bat` or run:
+```powershell
+.\start.bat
+```
+
+**Manual Start**:
+- Backend: `uvicorn backend.main:app --reload --port 8000`
+- Frontend: `npm run dev` (inside `frontend/`)
+
+Open [http://localhost:3000](http://localhost:3000) to use the app.
 
 ## AI mode (optional)
 
-Create a `.env` file:
+Create a `.env` file in the root:
 
 ```bash
 OPENAI_API_KEY="your_key_here"
-OPENAI_MODEL="gpt-5.2"
+OPENAI_MODEL="deepseek-chat"
+OPENAI_BASE_URL="https://api.deepseek.com"
 ```
-
-## Outputs
-
-When you click **Generate**, the app writes:
-- `outputs/report.md`
-- `outputs/analysis.py`
 
 ## Repo structure
 
 ```
-src/causal_agent/   core logic
-streamlit_app.py    UI
-tests/              tiny smoke test
+backend/            FastAPI app
+frontend/           Next.js app
+src/causal_agent/   Core business logic
 ```
 
 ## Notes
