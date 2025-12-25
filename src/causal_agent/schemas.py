@@ -1,22 +1,35 @@
 from __future__ import annotations
 
+from enum import Enum
 from pydantic import BaseModel, Field, model_validator
 
+class MetricType(str, Enum):
+    BINARY = "binary"
+    CONTINUOUS = "continuous"
+
+class AnalysisType(str, Enum):
+    FREQUENTIST = "frequentist"
+    BAYESIAN = "bayesian"
 
 class PowerRequest(BaseModel):
-    baseline_rate: float = Field(..., ge=0.0, le=1.0, description="Baseline conversion rate p0")
-    mde_abs: float = Field(..., gt=0.0, le=1.0, description="Minimum detectable effect (absolute), e.g. 0.01")
+    baseline_rate: float = Field(..., description="Baseline conversion rate p0 (or mean for continuous)")
+    mde_abs: float = Field(..., gt=0.0, description="Minimum detectable effect (absolute)")
     alpha: float = Field(0.05, gt=0.0, lt=1.0)
     power: float = Field(0.8, gt=0.0, lt=1.0)
     two_sided: bool = True
-
+    metric_type: MetricType = MetricType.BINARY
+    std_dev: float | None = Field(None, description="Standard deviation for continuous metrics")
+    cuped_enabled: bool = False
+    cuped_correlation: float | None = Field(None, ge=0.0, le=1.0, description="Correlation with covariate for CUPED")
 
 class PowerResult(BaseModel):
     n_per_group: int
     total_n: int
-    z_alpha: float
-    z_beta: float
+    z_alpha: float | None = None
+    z_beta: float | None = None
     assumptions: str
+    prob_b_beats_a: float | None = None  # For Bayesian
+
 
 
 class ExperimentContext(BaseModel):

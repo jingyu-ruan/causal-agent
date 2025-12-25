@@ -16,9 +16,11 @@ import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import ReactMarkdown from 'react-markdown'
-import { Loader2, Check, ChevronRight, ChevronLeft } from "lucide-react"
+import { Loader2, Check, ChevronRight, ChevronLeft, Download } from "lucide-react"
 
 const formSchema = z.object({
   goal: z.string().min(1, "Experiment Name is required"),
@@ -31,6 +33,11 @@ const formSchema = z.object({
   allocation_50_50: z.boolean().default(true),
   guardrails: z.array(z.string()).default([]),
   randomization_unit: z.string().default("user"),
+  metric_type: z.enum(["binary", "continuous"]).default("binary"),
+  std_dev: z.coerce.number().default(1.0),
+  cuped_enabled: z.boolean().default(false),
+  cuped_correlation: z.coerce.number().default(0.5),
+  analysis_type: z.enum(["frequentist", "bayesian"]).default("frequentist"),
 })
 
 const PREDEFINED_GUARDRAILS = [
@@ -51,13 +58,18 @@ export function ExperimentWizard() {
       goal: "",
       hypothesis: "",
       primary_metric: "",
+      metric_type: "binary",
       baseline_rate: 0.1,
+      std_dev: 1.0,
       mde_abs: 0.01,
       target_power: 0.8,
       traffic_per_day: 1000,
       allocation_50_50: true,
       guardrails: [],
       randomization_unit: "user",
+      cuped_enabled: false,
+      cuped_correlation: 0.5,
+      analysis_type: "frequentist",
     }
   })
 
@@ -65,7 +77,7 @@ export function ExperimentWizard() {
   
   // Power Calculation Query
   const powerQuery = useQuery({
-    queryKey: ['power', watchAll.baseline_rate, watchAll.mde_abs, watchAll.target_power],
+    queryKey: ['power', watchAll.baseline_rate, watchAll.mde_abs, watchAll.target_power, watchAll.metric_type, watchAll.std_dev, watchAll.cuped_enabled, watchAll.cuped_correlation],
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/design/power`, {
         method: "POST",
@@ -75,7 +87,11 @@ export function ExperimentWizard() {
           mde_abs: watchAll.mde_abs,
           power: watchAll.target_power,
           alpha: 0.05,
-          two_sided: true
+          two_sided: true,
+          metric_type: watchAll.metric_type,
+          std_dev: watchAll.metric_type === 'continuous' ? watchAll.std_dev : undefined,
+          cuped_enabled: watchAll.cuped_enabled,
+          cuped_correlation: watchAll.cuped_enabled ? watchAll.cuped_correlation : undefined
         })
       })
       if (!res.ok) throw new Error("Failed to fetch power")
@@ -84,15 +100,13 @@ export function ExperimentWizard() {
     enabled: step === 2
   })
 
-  // Power Curve (Simulated by multiple requests or client-side approximation? 
-  // User asked to fetch from API. I'll fetch a few points around the MDE)
+  // Power Curve
   const [curveData, setCurveData] = useState<any[]>([])
 
   useEffect(() => {
     if (step === 2) {
-        // Generate 5 points around MDE
         const center = watchAll.mde_abs
-        const points = [0.8, 0.9, 1.0, 1.1, 1.2].map(f => center * f).filter(v => v > 0 && v < 1)
+        const points = [0.5, 0.75, 1.0, 1.25, 1.5].map(f => center * f).filter(v => v > 0)
         
         Promise.all(points.map(async (mde) => {
             const res = await fetch(`${API_BASE}/design/power`, {
@@ -103,7 +117,11 @@ export function ExperimentWizard() {
                   mde_abs: mde,
                   power: watchAll.target_power,
                   alpha: 0.05,
-                  two_sided: true
+                  two_sided: true,
+                  metric_type: watchAll.metric_type,
+                  std_dev: watchAll.metric_type === 'continuous' ? watchAll.std_dev : undefined,
+                  cuped_enabled: watchAll.cuped_enabled,
+                  cuped_correlation: watchAll.cuped_enabled ? watchAll.cuped_correlation : undefined
                 })
             })
             const data = await res.json()
@@ -112,7 +130,7 @@ export function ExperimentWizard() {
             setCurveData(results.sort((a, b) => a.mde - b.mde))
         })
     }
-  }, [step, watchAll.baseline_rate, watchAll.mde_abs, watchAll.target_power])
+  }, [step, watchAll.baseline_rate, watchAll.mde_abs, watchAll.target_power, watchAll.metric_type, watchAll.std_dev, watchAll.cuped_enabled, watchAll.cuped_correlation])
 
 
   // Plan Generation Mutation
@@ -128,14 +146,19 @@ export function ExperimentWizard() {
                 alpha: 0.05,
                 target_power: values.target_power,
                 traffic_per_day: values.traffic_per_day,
-                allocation_treatment: values.allocation_50_50 ? 0.5 : 0.5, // Simplifying logic
+                allocation_treatment: values.allocation_50_50 ? 0.5 : 0.5,
                 allocation_control: values.allocation_50_50 ? 0.5 : 0.5,
                 randomization_unit: values.randomization_unit,
                 primary_metric: values.primary_metric,
+                metric_type: values.metric_type,
                 metric_window_days: 7,
                 guardrails: values.guardrails,
                 segments: [],
-                notes: values.hypothesis || ""
+                notes: values.hypothesis || "",
+                std_dev: values.metric_type === 'continuous' ? values.std_dev : undefined,
+                cuped_enabled: values.cuped_enabled,
+                cuped_correlation: values.cuped_enabled ? values.cuped_correlation : undefined,
+                analysis_type: values.analysis_type
             })
         })
         if (!res.ok) throw new Error("Failed to generate plan")
@@ -202,6 +225,24 @@ export function ExperimentWizard() {
                                     <FormControl>
                                         <Input placeholder="e.g. Conversion Rate" {...field} />
                                     </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+
+                            <FormField control={form.control} name="metric_type" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Metric Type</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select a metric type" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="binary">Binary (Conversion Rate, 0/1)</SelectItem>
+                                            <SelectItem value="continuous">Continuous (Revenue, Time spent)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                     <FormMessage />
                                 </FormItem>
                             )} />
@@ -288,6 +329,37 @@ export function ExperimentWizard() {
 
                     {step === 3 && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                            <FormField control={form.control} name="analysis_type" render={({ field }) => (
+                                <FormItem className="space-y-3">
+                                    <FormLabel>Analysis Framework</FormLabel>
+                                    <FormControl>
+                                        <RadioGroup
+                                            onValueChange={field.onChange}
+                                            defaultValue={field.value}
+                                            className="flex flex-col space-y-1"
+                                        >
+                                            <FormItem className="flex items-center space-x-3 space-y-0">
+                                                <FormControl>
+                                                    <RadioGroupItem value="frequentist" />
+                                                </FormControl>
+                                                <FormLabel className="font-normal">
+                                                    Frequentist (P-value, Confidence Intervals)
+                                                </FormLabel>
+                                            </FormItem>
+                                            <FormItem className="flex items-center space-x-3 space-y-0">
+                                                <FormControl>
+                                                    <RadioGroupItem value="bayesian" />
+                                                </FormControl>
+                                                <FormLabel className="font-normal">
+                                                    Bayesian (Probability B beats A)
+                                                </FormLabel>
+                                            </FormItem>
+                                        </RadioGroup>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+
                             <FormField control={form.control} name="allocation_50_50" render={({ field }) => (
                                 <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                                     <div className="space-y-0.5">
@@ -372,7 +444,12 @@ export function ExperimentWizard() {
                             {planMutation.isSuccess && planMutation.data && (
                                 <div className="mt-4 prose prose-slate max-w-none">
                                     <div className="rounded-lg border p-6 bg-white shadow-sm">
-                                        <h2 className="text-2xl font-bold mb-4">{planMutation.data.title}</h2>
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h2 className="text-2xl font-bold">{planMutation.data.title}</h2>
+                                            <Button variant="outline" size="sm" onClick={() => window.print()}>
+                                                <Download className="mr-2 h-4 w-4" /> Export PDF
+                                            </Button>
+                                        </div>
                                         <div className="mb-4 p-4 bg-blue-50 rounded-md">
                                             <strong>Hypothesis:</strong> {planMutation.data.hypothesis}
                                         </div>

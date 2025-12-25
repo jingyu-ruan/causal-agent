@@ -1,12 +1,13 @@
 from __future__ import annotations
-
+import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+import chromadb
+from chromadb.utils import embedding_functions
 
+from .config import Settings
 
 def _chunk_text(text: str, chunk_size: int = 800) -> list[str]:
     text = text.replace("\r\n", "\n")
@@ -24,28 +25,110 @@ def _chunk_text(text: str, chunk_size: int = 800) -> list[str]:
         parts.append("\n".join(buf).strip())
     return [p for p in parts if p]
 
-@dataclass
 class LocalRAG:
-    chunks: list[str]
-    vectorizer: TfidfVectorizer
-    matrix: Any
-
-    @staticmethod
-    def from_docs_dir(docs_dir: Path) -> LocalRAG:
-        chunks: list[str] = []
-        if docs_dir.exists():
-            for p in sorted(docs_dir.glob("**/*.md")):
-                chunks.extend(_chunk_text(p.read_text(encoding="utf-8")))
-        if not chunks:
-            chunks = ["No docs loaded."]
-        vec = TfidfVectorizer(stop_words="english", max_features=5000)
-        mat = vec.fit_transform(chunks)
-        return LocalRAG(chunks=chunks, vectorizer=vec, matrix=mat)
-
+    def __init__(self, settings: Settings, persist_path: str = "./chroma_db"):
+        self.client = chromadb.PersistentClient(path=persist_path)
+        
+        # Use OpenAI Embedding Function if key is available
+        if settings.openai_api_key:
+            self.embedding_fn = embedding_functions.OpenAIEmbeddingFunction(
+                api_key=settings.openai_api_key,
+                model_name="text-embedding-3-small"
+            )
+        else:
+            # Fallback to default
+            print("Warning: No OpenAI API Key found for RAG. Using default embeddings.")
+            self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
+            
+        self.docs_collection = self.client.get_or_create_collection(
+            name="documents",
+            embedding_function=self.embedding_fn
+        )
+        self.experiments_collection = self.client.get_or_create_collection(
+            name="experiments",
+            embedding_function=self.embedding_fn
+        )
+    
+    def load_docs(self, docs_dir: Path):
+        if not docs_dir.exists():
+            return
+            
+        # Simple strategy: clear and reload to ensure freshness
+        existing_ids = self.docs_collection.get()['ids']
+        if existing_ids:
+            self.docs_collection.delete(ids=existing_ids)
+            
+        chunks = []
+        metadatas = []
+        ids = []
+        
+        # Use a counter for unique IDs across files
+        counter = 0
+        
+        for p in sorted(docs_dir.glob("**/*.md")):
+            try:
+                text = p.read_text(encoding="utf-8")
+                file_chunks = _chunk_text(text)
+                for j, chunk in enumerate(file_chunks):
+                    chunks.append(chunk)
+                    metadatas.append({"source": p.name, "chunk_index": j})
+                    ids.append(f"doc_{counter}_{j}")
+                counter += 1
+            except Exception as e:
+                print(f"Error reading {p}: {e}")
+        
+        if chunks:
+            # Add in batches if necessary, but for now all at once is fine for small docs
+            self.docs_collection.add(
+                documents=chunks,
+                metadatas=metadatas,
+                ids=ids
+            )
+            
     def retrieve(self, query: str, k: int = 4) -> list[str]:
         if not query.strip():
             return []
-        qv = self.vectorizer.transform([query])
-        sims = cosine_similarity(qv, self.matrix)[0]
-        idx = sims.argsort()[::-1][:k]
-        return [self.chunks[i] for i in idx]
+            
+        try:
+            results = self.docs_collection.query(
+                query_texts=[query],
+                n_results=k
+            )
+            
+            if results and results['documents']:
+                return results['documents'][0]
+        except Exception as e:
+            print(f"RAG Retrieve Error: {e}")
+        return []
+
+    def retrieve_experiments(self, query: str, k: int = 3) -> list[str]:
+        if not query.strip():
+            return []
+            
+        try:
+            results = self.experiments_collection.query(
+                query_texts=[query],
+                n_results=k
+            )
+            
+            if results and results['documents']:
+                return results['documents'][0]
+        except Exception as e:
+            print(f"Experiment Retrieve Error: {e}")
+        return []
+        
+    def index_experiment(self, exp_id: str, content: str, metadata: dict):
+        try:
+            self.experiments_collection.add(
+                documents=[content],
+                metadatas=[metadata],
+                ids=[exp_id]
+            )
+        except Exception as e:
+            print(f"Index Experiment Error: {e}")
+
+    @staticmethod
+    def from_docs_dir(docs_dir: Path, settings: Settings) -> LocalRAG:
+        rag = LocalRAG(settings)
+        rag.load_docs(docs_dir)
+        return rag

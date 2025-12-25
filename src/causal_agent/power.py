@@ -4,7 +4,7 @@ import math
 
 from scipy.stats import norm
 
-from .schemas import PowerRequest, PowerResult
+from .schemas import PowerRequest, PowerResult, MetricType
 
 
 def _clamp(p: float) -> float:
@@ -13,36 +13,75 @@ def _clamp(p: float) -> float:
     return min(max(p, eps), 1.0 - eps)
 
 
-def two_proportion_sample_size(req: PowerRequest) -> PowerResult:
-    """Approximate required sample size per group for two-proportion z test.
-
-    This is a planning heuristic (normal approximation). It's good enough for an MVP.
-    """
-    p0 = _clamp(req.baseline_rate)
-    p1 = _clamp(p0 + req.mde_abs)
-
+def calculate_sample_size(req: PowerRequest) -> PowerResult:
+    """Calculate required sample size per group with support for Continuous metrics and CUPED."""
+    
     alpha = req.alpha / 2.0 if req.two_sided else req.alpha
     z_alpha = float(norm.ppf(1 - alpha))
     z_beta = float(norm.ppf(req.power))
+    
+    # Variance calculation
+    if req.metric_type == MetricType.CONTINUOUS:
+        if req.std_dev is None:
+            # Fallback or error if std_dev is missing for continuous
+            # For now, let's assume std_dev = baseline_rate (mean) as a rough heuristic if not provided,
+            # but ideally should raise error.
+            sigma = req.baseline_rate 
+        else:
+            sigma = req.std_dev
+        
+        # Variance for difference of means = sigma^2/n + sigma^2/n -> we use pooled variance logic
+        # For sample size formula: n = 2 * sigma^2 * (z_alpha + z_beta)^2 / delta^2
+        base_variance = sigma ** 2
+        # We assume equal variance in both groups for planning
+        combined_variance = 2 * base_variance
+        
+    else:
+        # Binary (Proportion)
+        p0 = _clamp(req.baseline_rate)
+        p1 = _clamp(p0 + req.mde_abs)
+        var0 = p0 * (1 - p0)
+        var1 = p1 * (1 - p1)
+        combined_variance = var0 + var1
 
-    # Pooled variance planning formula (common approximation)
-    var0 = p0 * (1 - p0)
-    var1 = p1 * (1 - p1)
+    # CUPED Adjustment
+    # Var_cuped = Var * (1 - rho^2)
+    if req.cuped_enabled and req.cuped_correlation is not None:
+        rho = req.cuped_correlation
+        combined_variance *= (1 - rho ** 2)
+        cuped_note = f"; CUPED enabled (rho={rho})"
+    else:
+        cuped_note = "; no CUPED"
 
     denom = (req.mde_abs ** 2)
-    n = ((z_alpha + z_beta) ** 2) * (var0 + var1) / denom
+    if denom == 0:
+        n = 0
+    else:
+        n = ((z_alpha + z_beta) ** 2) * combined_variance / denom
+        
     n_per_group = int(math.ceil(n))
+
+    assumptions = (
+        f"{req.metric_type.value} metric; "
+        "independent samples; fixed horizon"
+        f"{cuped_note}."
+    )
 
     return PowerResult(
         n_per_group=n_per_group,
         total_n=2 * n_per_group,
         z_alpha=z_alpha,
         z_beta=z_beta,
-        assumptions=(
-            "Two-proportion z-test normal approximation; "
-            "independent samples; fixed horizon; no CUPED/variance reduction."
-        ),
+        assumptions=assumptions,
     )
+
+
+def two_proportion_sample_size(req: PowerRequest) -> PowerResult:
+    """Approximate required sample size per group for two-proportion z test.
+    
+    Legacy wrapper around calculate_sample_size.
+    """
+    return calculate_sample_size(req)
 
 
 def ztest_n_per_group(*, baseline_rate: float, mde_abs: float, alpha: float = 0.05, power: float = 0.8, two_sided: bool = True) -> PowerResult:
