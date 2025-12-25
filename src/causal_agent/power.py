@@ -4,7 +4,7 @@ import math
 
 from scipy.stats import norm
 
-from .schemas import PowerRequest, PowerResult, MetricType
+from .schemas import MetricType, PowerRequest, PowerResult
 
 
 def _clamp(p: float) -> float:

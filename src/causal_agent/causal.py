@@ -1,18 +1,20 @@
 from __future__ import annotations
+
+from typing import Any
+
 import pandas as pd
-import numpy as np
-from sklearn.linear_model import LinearRegression, Ridge, Lasso
-from sklearn.ensemble import RandomForestRegressor
-from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import Lasso, LinearRegression, Ridge
+
 
 class CausalResult(BaseModel):
     effect: float
-    ci_lower: Optional[float] = None
-    ci_upper: Optional[float] = None
-    p_value: Optional[float] = None
+    ci_lower: float | None = None
+    ci_upper: float | None = None
+    p_value: float | None = None
     method: str
-    details: Dict[str, Any] = {}
+    details: dict[str, Any] = {}
 
 class DifferenceInDifferences:
     """
@@ -116,7 +118,7 @@ class SyntheticControl:
             effect=att,
             method="Synthetic Control Method",
             details={
-                "weights": dict(zip(X_train.columns, self.model.coef_)),
+                "weights": dict(zip(X_train.columns, self.model.coef_, strict=False)),
                 "actual_post": y_post_actual.tolist(),
                 "synthetic_post": y_post_synthetic.tolist()
             }
@@ -135,7 +137,7 @@ class HTELearner:
         self.m1 = model_class()
         
     def fit_predict(self, df: pd.DataFrame,
-                   feature_cols: List[str],
+                   feature_cols: list[str],
                    treatment_col: str,
                    outcome_col: str) -> pd.DataFrame:
         

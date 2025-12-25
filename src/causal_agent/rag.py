@@ -1,13 +1,12 @@
 from __future__ import annotations
-import os
-from dataclasses import dataclass
+
 from pathlib import Path
-from typing import Any, List
 
 import chromadb
 from chromadb.utils import embedding_functions
 
 from .config import Settings
+
 
 def _chunk_text(text: str, chunk_size: int = 800) -> list[str]:
     text = text.replace("\r\n", "\n")

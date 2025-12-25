@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from enum import Enum
+
 from pydantic import BaseModel, Field, model_validator
+
 
 class MetricType(str, Enum):
     BINARY = "binary"

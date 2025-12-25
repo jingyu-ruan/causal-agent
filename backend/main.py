@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from .api import router
 
 app = FastAPI(title="Causal Agent API")

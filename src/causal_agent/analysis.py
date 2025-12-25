@@ -1,11 +1,15 @@
 from __future__ import annotations
-import pandas as pd
+
+from typing import Any
+
 import numpy as np
-from scipy import stats
+import pandas as pd
 from pydantic import BaseModel
-from typing import List, Dict, Any
-from .schemas import MetricType, AnalysisType
-from .causal import DifferenceInDifferences, SyntheticControl, CausalResult
+from scipy import stats
+
+from .causal import CausalResult, DifferenceInDifferences, SyntheticControl
+from .schemas import AnalysisType, MetricType
+
 
 class AnalysisResult(BaseModel):
     variant: str
@@ -22,9 +26,9 @@ class AnalysisResult(BaseModel):
 
 class ExperimentAnalysis(BaseModel):
     control_variant: str
-    results: List[AnalysisResult]
+    results: list[AnalysisResult]
     srm_warning: bool
-    warnings: List[str]
+    warnings: list[str]
 
 def check_srm(df: pd.DataFrame, variant_col: str) -> float:
     # Chi-square test for SRM
@@ -177,9 +181,9 @@ def auto_drill_down(
     metric_col: str,
     variant_col: str,
     control_label: str,
-    segment_cols: List[str],
+    segment_cols: list[str],
     metric_type: MetricType = MetricType.CONTINUOUS
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Automatically checks segments if the overall result is not satisfactory.
     """

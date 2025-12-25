@@ -1,22 +1,32 @@
-import sys
-import os
-import json
 import io
+import json
+import os
+import sys
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from openai import OpenAI
+
 import pandas as pd
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from openai import OpenAI
 
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
 
-from causal_agent.schemas import ExperimentInputs, ExperimentPlan, PowerRequest, PowerResult, ExperimentSpec, ExperimentContext, MetricType, AnalysisType
+from causal_agent.analysis import ExperimentAnalysis, analyze_experiment
+from causal_agent.config import Settings, load_settings
+from causal_agent.critic import CriticService
 from causal_agent.planner import build_plan
 from causal_agent.power import calculate_sample_size
-from causal_agent.critic import CriticService
-from causal_agent.config import load_settings, Settings
 from causal_agent.rag import LocalRAG
-from causal_agent.analysis import analyze_experiment, ExperimentAnalysis
+from causal_agent.schemas import (
+    AnalysisType,
+    ExperimentContext,
+    ExperimentInputs,
+    ExperimentPlan,
+    ExperimentSpec,
+    MetricType,
+    PowerRequest,
+    PowerResult,
+)
 
 router = APIRouter()
 settings = load_settings()

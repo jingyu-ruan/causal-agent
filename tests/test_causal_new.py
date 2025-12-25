@@ -1,8 +1,10 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
-from causal_agent.causal import DifferenceInDifferences, SyntheticControl, HTELearner
-from causal_agent.analysis import auto_drill_down, MetricType
+
+from causal_agent.analysis import MetricType, auto_drill_down
+from causal_agent.causal import DifferenceInDifferences, HTELearner, SyntheticControl
+
 
 def test_did():
     # Mock data for DiD
