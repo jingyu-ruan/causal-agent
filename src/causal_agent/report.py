@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .schemas import ExperimentSpec
+
 from .schemas import ExperimentContext, ExperimentPlan
 
 
@@ -61,7 +66,7 @@ Generated on: {date.today().isoformat()}
 
 class ReportRenderer:
     """Small adapter that takes an ExperimentSpec and renders markdown."""
-    def render(self, spec: "ExperimentSpec") -> str:
+    def render(self, spec: ExperimentSpec) -> str:
         # convert inputs back to ExperimentContext expected by render_report_md
         from .schemas import ExperimentContext
 

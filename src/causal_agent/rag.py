@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
 
 def _chunk_text(text: str, chunk_size: int = 800) -> list[str]:
     text = text.replace("\r\n", "\n")
@@ -29,7 +31,7 @@ class LocalRAG:
     matrix: Any
 
     @staticmethod
-    def from_docs_dir(docs_dir: Path) -> "LocalRAG":
+    def from_docs_dir(docs_dir: Path) -> LocalRAG:
         chunks: list[str] = []
         if docs_dir.exists():
             for p in sorted(docs_dir.glob("**/*.md")):

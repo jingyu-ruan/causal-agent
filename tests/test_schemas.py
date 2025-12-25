@@ -1,5 +1,7 @@
 import pytest
+
 from causal_agent.schemas import ExperimentInputs
+
 
 def test_allocation_sum():
     with pytest.raises(ValueError):

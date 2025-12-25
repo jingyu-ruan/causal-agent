@@ -1,6 +1,7 @@
 from causal_agent.planner import PlanService
-from causal_agent.schemas import ExperimentInputs
 from causal_agent.report import ReportRenderer
+from causal_agent.schemas import ExperimentInputs
+
 
 def test_report_renders():
     inputs = ExperimentInputs(

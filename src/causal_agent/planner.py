@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
+
 from pydantic import TypeAdapter
 
 from .config import Settings
 from .llm import LLMConfig, call_llm_json
 from .power import two_proportion_sample_size
 from .schemas import ExperimentContext, ExperimentPlan, PowerRequest
+
+if TYPE_CHECKING:
+    from .schemas import ExperimentInputs, ExperimentSpec
 
 
 def _heuristic_plan(ctx: ExperimentContext) -> ExperimentPlan:
@@ -121,9 +126,10 @@ class PlanService:
         self.rag = rag
         self.llm = llm
 
-    def build_spec(self, inputs: "ExperimentInputs") -> "ExperimentSpec":
+    def build_spec(self, inputs: ExperimentInputs) -> ExperimentSpec:
         # Local import to avoid circular imports at module import time
-        from .schemas import ExperimentContext, ExperimentSpec, ExperimentInputs as _EI
+        from .schemas import ExperimentContext, ExperimentSpec
+        from .schemas import ExperimentInputs as _EI
 
         if not isinstance(inputs, _EI):
             # pydantic will coerce/validate if a dict-like is passed

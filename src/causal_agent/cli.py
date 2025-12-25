@@ -3,10 +3,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .codegen import render_analysis_py
 from .config import load_settings
 from .planner import build_plan
 from .report import render_report_md
-from .codegen import render_analysis_py
 from .schemas import ExperimentContext
 
 

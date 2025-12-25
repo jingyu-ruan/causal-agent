@@ -1,4 +1,5 @@
-from causal_agent.power import ztest_n_per_group, simulate_power_two_proportion
+from causal_agent.power import simulate_power_two_proportion, ztest_n_per_group
+
 
 def test_power_n_positive():
     res = ztest_n_per_group(baseline_rate=0.05, mde_abs=0.01, alpha=0.05, power=0.8)

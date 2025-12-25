@@ -9,14 +9,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 from dotenv import load_dotenv
 
+from causal_agent.codegen import AnalysisCodegen
 from causal_agent.config import AppConfig
+from causal_agent.critic import CriticService
 from causal_agent.llm import OpenAIResponsesLLM
 from causal_agent.planner import PlanService
 from causal_agent.rag import LocalRAG
-from causal_agent.schemas import ExperimentInputs, ExperimentSpec
-from causal_agent.critic import CriticService
 from causal_agent.report import ReportRenderer
-from causal_agent.codegen import AnalysisCodegen
+from causal_agent.schemas import ExperimentInputs, ExperimentSpec
 from causal_agent.utils import ensure_dir, to_pretty_json
 
 load_dotenv()

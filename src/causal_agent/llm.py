@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+
 from openai import OpenAI
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)

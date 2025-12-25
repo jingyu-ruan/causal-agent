@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+
 from scipy.stats import norm
 
 from .schemas import PowerRequest, PowerResult
@@ -64,8 +65,8 @@ def simulate_power_two_proportion(n_per_group: int, baseline_rate: float, mde_ab
 
     This is a simple (but adequate for tests) simulation using binomial draws.
     """
-    import random
     import math
+    import random
 
     random.seed(seed)
     p0 = _clamp(baseline_rate)

@@ -4,10 +4,10 @@ from pathlib import Path
 
 import streamlit as st
 
+from causal_agent.codegen import render_analysis_py
 from causal_agent.config import load_settings
 from causal_agent.planner import build_plan
 from causal_agent.report import render_report_md
-from causal_agent.codegen import render_analysis_py
 from causal_agent.schemas import ExperimentContext
 
 
