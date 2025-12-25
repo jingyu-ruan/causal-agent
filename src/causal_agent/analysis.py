@@ -5,6 +5,7 @@ from scipy import stats
 from pydantic import BaseModel
 from typing import List, Dict, Any
 from .schemas import MetricType, AnalysisType
+from .causal import DifferenceInDifferences, SyntheticControl, CausalResult
 
 class AnalysisResult(BaseModel):
     variant: str
@@ -170,3 +171,66 @@ def analyze_experiment(
         results.append(res)
         
     return ExperimentAnalysis(control_variant=control_label, results=results, srm_warning=srm_warning, warnings=warnings)
+
+def auto_drill_down(
+    df: pd.DataFrame,
+    metric_col: str,
+    variant_col: str,
+    control_label: str,
+    segment_cols: List[str],
+    metric_type: MetricType = MetricType.CONTINUOUS
+) -> List[Dict[str, Any]]:
+    """
+    Automatically checks segments if the overall result is not satisfactory.
+    """
+    insights = []
+    
+    # Iterate over segments
+    for seg_col in segment_cols:
+        if seg_col not in df.columns:
+            continue
+            
+        segments = df[seg_col].unique()
+        for seg_val in segments:
+            seg_df = df[df[seg_col] == seg_val]
+            if len(seg_df) < 10: # skip small segments
+                continue
+                
+            try:
+                # We reuse analyze_experiment for the segment
+                res = analyze_experiment(
+                    seg_df, metric_col, variant_col, metric_type, control_label
+                )
+                
+                # Check for significant results in segment
+                for r in res.results:
+                    if r.variant != control_label:
+                        # Check if significant or if direction is different from main (e.g. Simpson's paradox)
+                        if r.is_significant:
+                             insights.append({
+                                 "segment_col": seg_col,
+                                 "segment_value": str(seg_val),
+                                 "variant": r.variant,
+                                 "lift": r.lift,
+                                 "p_value": r.p_value,
+                                 "message": f"Significant effect found in {seg_col}={seg_val} (Lift: {r.lift:.2%})"
+                             })
+                         
+            except Exception:
+                continue
+                
+    return insights
+
+def analyze_observational(
+    df: pd.DataFrame,
+    method: str,
+    **kwargs
+) -> CausalResult:
+    if method == "did":
+        model = DifferenceInDifferences()
+        return model.fit(df, **kwargs)
+    elif method == "scm":
+        model = SyntheticControl()
+        return model.fit(df, **kwargs)
+    else:
+        raise ValueError(f"Unknown method: {method}")
