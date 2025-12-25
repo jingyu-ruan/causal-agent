@@ -109,3 +109,39 @@ def build_plan(ctx: ExperimentContext, settings: Settings) -> ExperimentPlan:
         return TypeAdapter(ExperimentPlan).validate_python(data)
     except Exception:
         return base_plan
+
+
+class PlanService:
+    """Backwards-compatible thin service to build an ExperimentSpec from ExperimentInputs.
+
+    The real planning logic lives in _heuristic_plan/build_plan; tests expect a
+    PlanService with a .build_spec(inputs) method, so we provide that here.
+    """
+    def __init__(self, rag: object | None = None, llm: object | None = None):
+        self.rag = rag
+        self.llm = llm
+
+    def build_spec(self, inputs: "ExperimentInputs") -> "ExperimentSpec":
+        # Local import to avoid circular imports at module import time
+        from .schemas import ExperimentContext, ExperimentSpec, ExperimentInputs as _EI
+
+        if not isinstance(inputs, _EI):
+            # pydantic will coerce/validate if a dict-like is passed
+            inputs = _EI(**dict(inputs)) if isinstance(inputs, dict) else _EI.parse_obj(inputs)
+
+        ctx = ExperimentContext(
+            product_area=inputs.primary_metric,
+            primary_metric=inputs.primary_metric,
+            unit=inputs.randomization_unit,
+            baseline_rate=inputs.baseline_rate,
+            mde_abs=inputs.mde_abs,
+            daily_traffic=inputs.traffic_per_day,
+            guardrails=inputs.guardrails,
+            segments=inputs.segments,
+            notes=inputs.goal,
+        )
+
+        # Use the heuristic plan (deterministic, lightweight)
+        plan = _heuristic_plan(ctx)
+
+        return ExperimentSpec(inputs=inputs, plan=plan)

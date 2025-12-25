@@ -11,7 +11,9 @@ def render_report_md(ctx: ExperimentContext, plan: ExperimentPlan) -> str:
     metrics = "\n".join([f"- {m}" for m in plan.metric_definitions]) or "- (none)"
     segments = "\n".join([f"- {s}" for s in ctx.segments]) if ctx.segments else "- (none provided)"
 
-    return f"""# {plan.title}
+    return f"""# Experiment Plan
+
+{plan.title}
 
 Generated on: {date.today().isoformat()}
 
@@ -35,7 +37,7 @@ Generated on: {date.today().isoformat()}
 **Suggested segments (for exploration, after the main decision)**
 {segments}
 
-## 3) Power and sample size
+## 3) Power and Sample Size
 
 - Baseline rate: {ctx.baseline_rate:.3%}
 - MDE (absolute): {ctx.mde_abs:.3%}
@@ -55,3 +57,24 @@ Generated on: {date.today().isoformat()}
 
 {ctx.notes if ctx.notes.strip() else "(none)"}
 """
+
+
+class ReportRenderer:
+    """Small adapter that takes an ExperimentSpec and renders markdown."""
+    def render(self, spec: "ExperimentSpec") -> str:
+        # convert inputs back to ExperimentContext expected by render_report_md
+        from .schemas import ExperimentContext
+
+        inputs = spec.inputs
+        ctx = ExperimentContext(
+            product_area=inputs.primary_metric,
+            primary_metric=inputs.primary_metric,
+            unit=inputs.randomization_unit,
+            baseline_rate=inputs.baseline_rate,
+            mde_abs=inputs.mde_abs,
+            daily_traffic=inputs.traffic_per_day,
+            guardrails=inputs.guardrails,
+            segments=inputs.segments,
+            notes=inputs.goal,
+        )
+        return render_report_md(ctx, spec.plan)

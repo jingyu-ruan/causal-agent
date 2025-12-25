@@ -42,3 +42,56 @@ def two_proportion_sample_size(req: PowerRequest) -> PowerResult:
             "independent samples; fixed horizon; no CUPED/variance reduction."
         ),
     )
+
+
+def ztest_n_per_group(*, baseline_rate: float, mde_abs: float, alpha: float = 0.05, power: float = 0.8, two_sided: bool = True) -> PowerResult:
+    """Backward-compatible wrapper that mirrors the old public API used by tests.
+
+    Accepts keyword args and builds a PowerRequest to call the primary implementation.
+    """
+    req = PowerRequest(
+        baseline_rate=baseline_rate,
+        mde_abs=mde_abs,
+        alpha=alpha,
+        power=power,
+        two_sided=two_sided,
+    )
+    return two_proportion_sample_size(req)
+
+
+def simulate_power_two_proportion(n_per_group: int, baseline_rate: float, mde_abs: float, alpha: float = 0.05, iters: int = 1000, seed: int | None = None, two_sided: bool = True) -> float:
+    """Monte-carlo simulate empirical power for two-proportion z-test.
+
+    This is a simple (but adequate for tests) simulation using binomial draws.
+    """
+    import random
+    import math
+
+    random.seed(seed)
+    p0 = _clamp(baseline_rate)
+    p1 = _clamp(baseline_rate + mde_abs)
+    rejections = 0
+
+    for _ in range(iters):
+        x0 = sum(random.random() < p0 for _ in range(n_per_group))
+        x1 = sum(random.random() < p1 for _ in range(n_per_group))
+
+        p_hat0 = x0 / n_per_group
+        p_hat1 = x1 / n_per_group
+
+        # pooled variance for z-test
+        p_pool = (x0 + x1) / (2 * n_per_group)
+        se = math.sqrt(2 * p_pool * (1 - p_pool) / n_per_group)
+        if se == 0:
+            continue
+
+        z = (p_hat1 - p_hat0) / se
+        if two_sided:
+            pval = 2 * (1 - norm.cdf(abs(z)))
+        else:
+            pval = 1 - norm.cdf(z)
+
+        if pval < alpha:
+            rejections += 1
+
+    return rejections / max(1, iters)

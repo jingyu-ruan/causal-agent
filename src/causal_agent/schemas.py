@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PowerRequest(BaseModel):
@@ -43,3 +43,33 @@ class ExperimentPlan(BaseModel):
     estimated_duration_days: int
     risks: list[str]
     analysis_outline: list[str]
+
+
+class ExperimentInputs(BaseModel):
+    goal: str
+    baseline_rate: float
+    mde_abs: float
+    alpha: float = 0.05
+    target_power: float = 0.8
+    traffic_per_day: int
+    allocation_treatment: float
+    allocation_control: float
+    randomization_unit: str
+    primary_metric: str
+    metric_window_days: int
+    guardrails: list[str] = Field(default_factory=list)
+    segments: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+    @model_validator(mode="after")
+    def allocations_sum_to_one(self):
+        a = self.allocation_treatment
+        b = self.allocation_control
+        if round(float(a) + float(b), 6) != 1.0:
+            raise ValueError("allocation_treatment + allocation_control must equal 1.0")
+        return self
+
+
+class ExperimentSpec(BaseModel):
+    inputs: ExperimentInputs
+    plan: ExperimentPlan
