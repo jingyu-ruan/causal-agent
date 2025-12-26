@@ -49,7 +49,7 @@ export default function ObservationalPage() {
         formData.append("file", selectedFile)
         
         try {
-            const res = await fetch("http://localhost:8000/common/preview", {
+            const res = await fetch("http://localhost:8000/api/common/preview", {
                 method: "POST",
                 body: formData
             })
@@ -74,8 +74,48 @@ export default function ObservationalPage() {
     }
   }
 
-  const handleGenerateData = () => {
-      window.location.href = "http://localhost:8000/common/generate_data?type=observational"
+  const handleGenerateData = async () => {
+      setPreviewLoading(true)
+      try {
+          // Pass current method to generate appropriate data structure
+          const res = await fetch(`http://localhost:8000/api/common/generate_data?type=observational&method=${method}`)
+          if (!res.ok) throw new Error("Failed to generate data")
+          const blob = await res.blob()
+          const demoFile = new File([blob], "demo_data.csv", { type: "text/csv" })
+          
+          setFile(demoFile)
+          
+          const formData = new FormData()
+          formData.append("file", demoFile)
+          
+          const prevRes = await fetch("http://localhost:8000/api/common/preview", {
+              method: "POST",
+              body: formData
+          })
+          
+          if (prevRes.ok) {
+              const data = await prevRes.json()
+              setColumns(data.columns)
+              setPreviewData(data.preview)
+              
+              setUnitCol("unit")
+              setTimeCol("time")
+              setOutcomeCol("y")
+              
+              if (method === "did") {
+                setTreatmentCol("treat")
+                setPostPeriodStart("2023")
+              } else {
+                // For SCM, we might need to look at data content or hardcode defaults for the demo
+                setTreatedUnit("City_A") 
+                setInterventionTime("2023")
+              }
+          }
+      } catch (error) {
+          console.error("Demo load failed", error)
+      } finally {
+          setPreviewLoading(false)
+      }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -105,7 +145,7 @@ export default function ObservationalPage() {
     }
 
     try {
-      const res = await fetch("http://localhost:8000/causal/analyze", {
+      const res = await fetch("http://localhost:8000/api/causal/analyze", {
         method: "POST",
         body: formData,
       })

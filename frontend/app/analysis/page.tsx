@@ -13,7 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Loader2, AlertTriangle, Upload, BarChart2, FileSpreadsheet } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ErrorBar } from 'recharts'
 
-const API_BASE = "http://localhost:8000"
+const API_BASE = "http://localhost:8000/api"
 
 export default function AnalysisPage() {
     const [file, setFile] = useState<File | null>(null)
@@ -85,6 +85,7 @@ export default function AnalysisPage() {
         try {
             // Fetch random CSV
             const res = await fetch(`${API_BASE}/common/generate_data?type=abtest`)
+            if (!res.ok) throw new Error("Failed to generate data")
             const blob = await res.blob()
             const demoFile = new File([blob], "demo_data.csv", { type: "text/csv" })
             
@@ -97,14 +98,19 @@ export default function AnalysisPage() {
                 method: "POST",
                 body: formData
             })
-            const data = await prevRes.json()
-            setColumns(data.columns)
-            setPreviewData(data.preview)
             
-            setValue("metric_col", "converted")
-            setValue("variant_col", "group")
-            setValue("control_label", "Control")
-            setValue("metric_type", "binary")
+            if (prevRes.ok) {
+                const data = await prevRes.json()
+                setColumns(data.columns)
+                setPreviewData(data.preview)
+                
+                setValue("metric_col", "converted")
+                setValue("variant_col", "group")
+                setValue("control_label", "Control")
+                setValue("metric_type", "binary")
+            } else {
+                 console.error("Preview failed for demo data")
+            }
             
         } catch (error) {
             console.error(error)

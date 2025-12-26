@@ -5,13 +5,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Search, Calculator, FlaskConical, Brain, Loader2 } from "lucide-react"
+import { Search, Calculator, FlaskConical, Brain, Loader2, Upload, FileText } from "lucide-react"
+import ReactMarkdown from "react-markdown"
 
 export default function DashboardPage() {
   // Brain State
   const [brainQuery, setBrainQuery] = useState("")
   const [brainAnswer, setBrainAnswer] = useState<string | null>(null)
   const [brainLoading, setBrainLoading] = useState(false)
+  const [brainFile, setBrainFile] = useState<File | null>(null)
 
   // Toolkit State
   const [baseline, setBaseline] = useState("")
@@ -21,16 +23,21 @@ export default function DashboardPage() {
 
   const handleBrainAsk = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!brainQuery.trim()) return
+    if (!brainQuery.trim() && !brainFile) return
 
     setBrainLoading(true)
     setBrainAnswer(null)
 
     try {
-      const res = await fetch("http://localhost:8000/brain/ask", {
+      const formData = new FormData()
+      formData.append("query", brainQuery)
+      if (brainFile) {
+        formData.append("file", brainFile)
+      }
+
+      const res = await fetch("http://localhost:8000/api/brain/ask", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: brainQuery }),
+        body: formData,
       })
       const data = await res.json()
       setBrainAnswer(data.answer)
@@ -54,7 +61,7 @@ export default function DashboardPage() {
 
       setCalcLoading(true)
       try {
-        const res = await fetch("http://localhost:8000/design/power", {
+        const res = await fetch("http://localhost:8000/api/design/power", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -69,6 +76,7 @@ export default function DashboardPage() {
         setSampleSize(data.n_per_group)
       } catch (error) {
         console.error(error)
+        setSampleSize(null)
       } finally {
         setCalcLoading(false)
       }
@@ -96,35 +104,70 @@ export default function DashboardPage() {
               <Brain className="h-5 w-5" />
               The Brain
             </CardTitle>
-            <CardDescription>Ask questions about causal inference or experiment design.</CardDescription>
+            <CardDescription>Ask questions about causal inference or analyze uploaded files.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form onSubmit={handleBrainAsk} className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-              <Input 
-                value={brainQuery}
-                onChange={(e) => setBrainQuery(e.target.value)}
-                placeholder="Ask insights from past experiments..." 
-                className="pl-9 pr-20 border-indigo-200 dark:border-indigo-800 focus-visible:ring-indigo-500"
-              />
-              <Button 
-                type="submit" 
-                size="sm" 
-                className="absolute right-1 top-1 h-8" 
-                disabled={brainLoading}
-              >
-                {brainLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ask"}
-              </Button>
+            <form onSubmit={handleBrainAsk} className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                <Input 
+                  value={brainQuery}
+                  onChange={(e) => setBrainQuery(e.target.value)}
+                  placeholder="Ask insights or describe your data..." 
+                  className="pl-9 border-indigo-200 dark:border-indigo-800 focus-visible:ring-indigo-500 bg-white dark:bg-slate-900"
+                />
+              </div>
+              
+              <div className="flex items-center gap-2">
+                 <div className="relative flex-1">
+                    <Input 
+                        type="file" 
+                        onChange={(e) => setBrainFile(e.target.files?.[0] || null)}
+                        className="cursor-pointer text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                    />
+                 </div>
+                 <Button 
+                    type="submit" 
+                    disabled={brainLoading || (!brainQuery.trim() && !brainFile)}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                 >
+                    {brainLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ask"}
+                 </Button>
+              </div>
             </form>
             
-            {brainAnswer && (
-              <div className="p-4 bg-white dark:bg-slate-900 rounded-md border border-indigo-100 dark:border-indigo-900 shadow-sm animate-in fade-in slide-in-from-top-2">
-                <h4 className="text-xs font-semibold text-indigo-500 uppercase mb-2">Answer</h4>
-                <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
-                  {brainAnswer}
-                </p>
-              </div>
-            )}
+            {/* Output Area */}
+            <div className="mt-6">
+                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">
+                    AI Response
+                </Label>
+                <div className="min-h-[100px] p-4 bg-white dark:bg-slate-900 rounded-md border border-indigo-100 dark:border-indigo-900 shadow-sm">
+                    {brainAnswer ? (
+                        <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed animate-in fade-in">
+                            <ReactMarkdown
+                                components={{
+                                    h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+                                    h2: ({node, ...props}) => <h2 className="text-lg font-semibold mt-3 mb-2" {...props} />,
+                                    h3: ({node, ...props}) => <h3 className="text-base font-medium mt-2 mb-1" {...props} />,
+                                    ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
+                                    ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-2" {...props} />,
+                                    li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                                    p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                                    code: ({node, ...props}) => <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-xs font-mono" {...props} />,
+                                    pre: ({node, ...props}) => <pre className="bg-slate-100 dark:bg-slate-800 p-2 rounded mb-2 overflow-x-auto" {...props} />,
+                                }}
+                            >
+                                {brainAnswer}
+                            </ReactMarkdown>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 text-sm italic py-4">
+                            <Brain className="h-8 w-8 mb-2 opacity-20" />
+                            <p>Ask a question or upload a file to get started.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -176,7 +219,7 @@ export default function DashboardPage() {
                     <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
                   ) : (
                     <p className="font-bold text-2xl text-slate-800 dark:text-slate-200">
-                      {sampleSize ? sampleSize.toLocaleString() : "--"}
+                      {sampleSize !== null && sampleSize !== undefined ? sampleSize.toLocaleString() : "--"}
                     </p>
                   )}
                 </div>

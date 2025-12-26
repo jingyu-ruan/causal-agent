@@ -161,18 +161,55 @@ def design_critique(spec: ExperimentSpec):
     return critic_service.review_and_improve(spec.inputs, spec)
 
 @router.post("/brain/ask", response_model=BrainResponse)
-def brain_ask(req: BrainRequest):
+async def brain_ask(
+    query: str = Form(...),
+    file: UploadFile = File(None)
+):
     if not llm_adapter:
         return BrainResponse(answer="LLM not configured. Please check your settings.")
     
     context = ""
     try:
-        results = rag_service.query(req.query)
+        results = rag_service.query(query)
         context = "\n".join([r['document'] for r in results])
     except:
         pass
         
-    prompt = f"Context:\n{context}\n\nQuestion: {req.query}\nAnswer:"
+    file_context = ""
+    if file:
+        try:
+            content = await file.read()
+            if file.filename.endswith('.csv'):
+                 df = pd.read_csv(io.BytesIO(content), nrows=10)
+                 file_context = f"\nUploaded File Preview:\n{df.to_markdown()}"
+            elif file.filename.endswith('.xlsx'):
+                 df = pd.read_excel(io.BytesIO(content), nrows=10)
+                 file_context = f"\nUploaded File Preview:\n{df.to_markdown()}"
+            elif file.filename.endswith('.md'):
+                 text = content.decode('utf-8')
+                 file_context = f"\nUploaded File Content:\n{text[:2000]}"
+            elif file.filename.endswith('.docx'):
+                  import docx
+                  doc = docx.Document(io.BytesIO(content))
+                  text = "\n".join([para.text for para in doc.paragraphs])
+                  file_context = f"\nUploaded File Content:\n{text[:2000]}"
+            elif file.filename.endswith('.pdf'):
+                from pypdf import PdfReader
+                reader = PdfReader(io.BytesIO(content))
+                text = ""
+                for page in reader.pages[:5]: # Limit to first 5 pages to avoid token limits
+                    text += page.extract_text() + "\n"
+                file_context = f"\nUploaded File Content:\n{text[:2000]}"
+            else:
+                try:
+                    text = content.decode('utf-8')
+                    file_context = f"\nUploaded File Content:\n{text[:2000]}"
+                except:
+                    file_context = "\nUploaded File: (Binary content not shown)"
+        except Exception as e:
+            file_context = f"\nError reading file: {e}"
+
+    prompt = f"Context:\n{context}\n{file_context}\n\nQuestion: {query}\nAnswer:"
     
     try:
         resp = llm_adapter.client.chat.completions.create(
@@ -210,28 +247,64 @@ async def common_preview(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/common/generate_data")
-def generate_data(type: str):
+def generate_data(type: str, method: str | None = None):
     # Generate random data
     if type == "observational":
-        # Generate DiD style data
-        data = []
-        for i in range(100):
-            unit = random.randint(1, 10)
-            time = random.randint(2020, 2025)
-            treat = 1 if unit > 5 else 0
-            post = 1 if time >= 2023 else 0
-            y = 100 + unit*10 + time*0.1 + treat*20 + post*10 + treat*post*30 + random.gauss(0, 5)
-            data.append({
-                "unit": unit,
-                "time": time,
-                "treat": treat,
-                "y": y
-            })
-        df = pd.DataFrame(data)
+        if method == "scm":
+            # Synthetic Control Method Data
+            # Unit: City, Time: Year (int)
+            # Treated unit: "City_A"
+            # Intervention: 2023
+            data = []
+            cities = ["City_A", "City_B", "City_C", "City_D", "City_E"]
+            years = range(2015, 2026)
+            
+            for city in cities:
+                # Base trend + city effect
+                city_effect = random.randint(10, 50)
+                for year in years:
+                    trend = (year - 2015) * 2
+                    noise = random.gauss(0, 2)
+                    y = 100 + city_effect + trend + noise
+                    
+                    # Treatment effect for City_A after 2023
+                    if city == "City_A" and year >= 2023:
+                        y += 25 # lift
+                        
+                    data.append({
+                        "unit": city,
+                        "time": year,
+                        "y": round(y, 2),
+                        "treated_unit": "City_A", # Helper col
+                        "intervention_time": 2023 # Helper col
+                    })
+            df = pd.DataFrame(data)
+            
+        else:
+            # Default to DiD style data
+            data = []
+            for i in range(100):
+                unit = random.randint(1, 20)
+                time = random.randint(2020, 2025)
+                # Treatment assignment (unit level)
+                treat = 1 if unit > 10 else 0
+                # Post period (time level)
+                post = 1 if time >= 2023 else 0
+                
+                # Outcome = 100 + unit_fe + time_fe + treat*20 + post*10 + treat*post*ATT + noise
+                y = 100 + unit*2 + (time-2020)*5 + treat*10 + post*5 + treat*post*30 + random.gauss(0, 5)
+                data.append({
+                    "unit": unit,
+                    "time": time,
+                    "treat": treat,
+                    "y": round(y, 2)
+                })
+            df = pd.DataFrame(data)
+            
     else:
         # A/B Test data
         data = []
-        for i in range(1000):
+        for i in range(100):
             group = "Treatment" if random.random() > 0.5 else "Control"
             # Random conversion rate
             base_rate = 0.1
@@ -278,6 +351,13 @@ async def analysis_upload(
             covariate_col=covariate_col,
             analysis_type=a_type
         )
+        # Ensure JSON compatibility for infinite/NaN values
+        for res in result.results:
+            if res.lift is not None and (pd.isna(res.lift) or pd.api.types.is_float(res.lift) and (res.lift == float('inf') or res.lift == float('-inf'))):
+                res.lift = None
+            if res.mean is not None and (pd.isna(res.mean) or pd.api.types.is_float(res.mean) and (res.mean == float('inf') or res.mean == float('-inf'))):
+                 res.mean = 0.0 # fallback
+
         return result
     except Exception as e:
         import traceback
