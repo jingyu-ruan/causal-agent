@@ -1,10 +1,10 @@
 import io
 import json
 import os
-import sys
 import random
+import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -16,7 +16,7 @@ from pydantic import BaseModel
 sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
 
 from causal_agent.analysis import ExperimentAnalysis, analyze_experiment, analyze_observational
-from causal_agent.causal import DifferenceInDifferences, SyntheticControl, CausalResult
+from causal_agent.causal import CausalResult
 from causal_agent.config import Settings, load_settings
 from causal_agent.critic import CriticService
 from causal_agent.planner import build_plan
@@ -66,8 +66,8 @@ class BrainResponse(BaseModel):
     answer: str
 
 class PreviewResponse(BaseModel):
-    columns: List[str]
-    preview: List[Dict[str, Any]]
+    columns: list[str]
+    preview: list[dict[str, Any]]
 
 # --- LLM Adapter ---
 class LLMAdapter:
@@ -107,7 +107,7 @@ if docs_path.exists():
 
 # --- Endpoints ---
 
-@router.get("/experiments/list", response_model=List[ExperimentSummary])
+@router.get("/experiments/list", response_model=list[ExperimentSummary])
 def list_experiments():
     return MOCK_EXPERIMENTS
 
@@ -172,7 +172,7 @@ async def brain_ask(
     try:
         results = rag_service.query(query)
         context = "\n".join([r['document'] for r in results])
-    except:
+    except Exception:
         pass
         
     file_context = ""
@@ -204,7 +204,7 @@ async def brain_ask(
                 try:
                     text = content.decode('utf-8')
                     file_context = f"\nUploaded File Content:\n{text[:2000]}"
-                except:
+                except Exception:
                     file_context = "\nUploaded File: (Binary content not shown)"
         except Exception as e:
             file_context = f"\nError reading file: {e}"
@@ -244,7 +244,7 @@ async def common_preview(file: UploadFile = File(...)):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 @router.get("/common/generate_data")
 def generate_data(type: str, method: str | None = None):
@@ -283,7 +283,7 @@ def generate_data(type: str, method: str | None = None):
         else:
             # Default to DiD style data
             data = []
-            for i in range(100):
+            for _ in range(100):
                 unit = random.randint(1, 20)
                 time = random.randint(2020, 2025)
                 # Treatment assignment (unit level)
@@ -304,7 +304,7 @@ def generate_data(type: str, method: str | None = None):
     else:
         # A/B Test data
         data = []
-        for i in range(100):
+        for _ in range(100):
             group = "Treatment" if random.random() > 0.5 else "Control"
             # Random conversion rate
             base_rate = 0.1
