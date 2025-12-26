@@ -43,7 +43,11 @@ default_settings = load_settings()
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./local.db")
 
 # 创建数据库连接引擎
-engine = create_engine(DATABASE_URL)
+# 增加 pool_pre_ping=True 参数
+engine = create_engine(
+    DATABASE_URL, 
+    pool_pre_ping=True
+)
 
 # --- 2. 定义数据表模型 (SQLModel) ---
 class Experiment(SQLModel, table=True):
