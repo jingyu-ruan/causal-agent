@@ -10,16 +10,21 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Loader2, AlertTriangle, Upload, BarChart2 } from "lucide-react"
+import { Loader2, AlertTriangle, Upload, BarChart2, FileSpreadsheet } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ErrorBar } from 'recharts'
 
-const API_BASE = "http://localhost:8000/api"
+const API_BASE = "http://localhost:8000"
 
 export default function AnalysisPage() {
     const [file, setFile] = useState<File | null>(null)
     const [demoMode, setDemoMode] = useState(false)
     
-    const { register, handleSubmit, watch, setValue } = useForm({
+    // Preview State
+    const [columns, setColumns] = useState<string[]>([])
+    const [previewData, setPreviewData] = useState<any[]>([])
+    const [previewLoading, setPreviewLoading] = useState(false)
+    
+    const { register, handleSubmit, watch, setValue, getValues } = useForm({
         defaultValues: {
             metric_col: "",
             variant_col: "",
@@ -30,22 +35,86 @@ export default function AnalysisPage() {
         }
     })
     
+    // Watch for controlled inputs to show in Select
+    const metricCol = watch("metric_col")
+    const variantCol = watch("variant_col")
+    const controlLabel = watch("control_label")
+    const covariateCol = watch("covariate_col")
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedFile = e.target.files?.[0] || null
+        setFile(selectedFile)
+        setDemoMode(false)
+        
+        if (selectedFile) {
+            setPreviewLoading(true)
+            const formData = new FormData()
+            formData.append("file", selectedFile)
+            
+            try {
+                const res = await fetch(`${API_BASE}/common/preview`, {
+                    method: "POST",
+                    body: formData
+                })
+                if (res.ok) {
+                    const data = await res.json()
+                    setColumns(data.columns)
+                    setPreviewData(data.preview)
+                    
+                    // Heuristic auto-select
+                    if (data.columns.includes("converted")) setValue("metric_col", "converted")
+                    else if (data.columns.includes("revenue")) setValue("metric_col", "revenue")
+                    
+                    if (data.columns.includes("group")) setValue("variant_col", "group")
+                    else if (data.columns.includes("variant")) setValue("variant_col", "variant")
+                }
+            } catch (error) {
+                console.error("Preview failed", error)
+            } finally {
+                setPreviewLoading(false)
+            }
+        } else {
+            setColumns([])
+            setPreviewData([])
+        }
+    }
+
+    const loadDemoData = async () => {
+        setDemoMode(true)
+        setPreviewLoading(true)
+        try {
+            // Fetch random CSV
+            const res = await fetch(`${API_BASE}/common/generate_data?type=abtest`)
+            const blob = await res.blob()
+            const demoFile = new File([blob], "demo_data.csv", { type: "text/csv" })
+            
+            setFile(demoFile)
+            
+            // Trigger preview
+            const formData = new FormData()
+            formData.append("file", demoFile)
+            const prevRes = await fetch(`${API_BASE}/common/preview`, {
+                method: "POST",
+                body: formData
+            })
+            const data = await prevRes.json()
+            setColumns(data.columns)
+            setPreviewData(data.preview)
+            
+            setValue("metric_col", "converted")
+            setValue("variant_col", "group")
+            setValue("control_label", "Control")
+            setValue("metric_type", "binary")
+            
+        } catch (error) {
+            console.error(error)
+        } finally {
+            setPreviewLoading(false)
+        }
+    }
+
     const mutation = useMutation({
         mutationFn: async (data: any) => {
-            if (demoMode) {
-                // Return mock data
-                await new Promise(resolve => setTimeout(resolve, 800))
-                return {
-                    control_variant: "Control",
-                    results: [
-                        { variant: "Control", sample_size: 15000, mean: 0.124, std_dev: 0.33, lift: null, p_value: null, ci_lower: null, ci_upper: null, prob_beat_control: null },
-                        { variant: "Treatment", sample_size: 14800, mean: 0.138, std_dev: 0.34, lift: 0.1129, p_value: 0.0004, ci_lower: 0.008, ci_upper: 0.020, prob_beat_control: 0.9998 }
-                    ],
-                    srm_warning: false,
-                    warnings: []
-                }
-            }
-
             const formData = new FormData()
             if (!file) throw new Error("No file selected")
             formData.append("file", file)
@@ -70,18 +139,8 @@ export default function AnalysisPage() {
     })
     
     const onSubmit = (data: any) => {
-        setDemoMode(false)
         mutation.mutate(data)
     }
-
-    const loadDemoData = () => {
-        setDemoMode(true)
-        setValue("metric_col", "conversion")
-        setValue("variant_col", "group")
-        setValue("control_label", "Control")
-        mutation.mutate({})
-    }
-
 
     // Chart Data Preparation
     const controlVariant = mutation.data?.control_variant
@@ -91,9 +150,6 @@ export default function AnalysisPage() {
     const chartData = mutation.data?.results
         .filter((r: any) => r.variant !== controlVariant)
         .map((res: any) => {
-            // Calculate relative error for Lift chart
-            // CI from backend is absolute difference CI
-            // We want relative CI for Lift
             let error = 0
             if (res.ci_upper !== null && res.ci_lower !== null) {
                 const absError = (res.ci_upper - res.ci_lower) / 2
@@ -108,93 +164,154 @@ export default function AnalysisPage() {
         }) || []
 
     return (
-        <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
+        <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
             <div className="space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Data Analysis</h1>
                 <p className="text-slate-500 dark:text-slate-400">Upload experiment data for instant analysis.</p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="md:col-span-1">
-                    <CardHeader>
-                        <CardTitle>Configuration</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Data File (CSV)</Label>
-                                <Input type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-                            </div>
-                            
-                            <div className="space-y-2">
-                                <Label>Variant Column</Label>
-                                <Input placeholder="e.g. group" {...register("variant_col", { required: true })} />
-                            </div>
-                            
-                            <div className="space-y-2">
-                                <Label>Metric Column</Label>
-                                <Input placeholder="e.g. converted" {...register("metric_col", { required: true })} />
-                            </div>
-                            
-                            <div className="space-y-2">
-                                <Label>Metric Type</Label>
-                                <Select onValueChange={v => setValue("metric_type", v)} defaultValue="binary">
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="binary">Binary</SelectItem>
-                                        <SelectItem value="continuous">Continuous</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            
-                            <div className="space-y-2">
-                                <Label>Control Group Label</Label>
-                                <Input placeholder="e.g. control" {...register("control_label", { required: true })} />
-                            </div>
-                            
-                            <div className="space-y-2">
-                                <Label>Covariate (Optional, for CUPED)</Label>
-                                <Input placeholder="e.g. pre_experiment_activity" {...register("covariate_col")} />
-                            </div>
-                            
-                            <div className="space-y-2">
-                                <Label>Analysis</Label>
-                                <RadioGroup defaultValue="frequentist" onValueChange={v => setValue("analysis_type", v)}>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="frequentist" id="freq" />
-                                        <Label htmlFor="freq">Frequentist</Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="bayesian" id="bayes" />
-                                        <Label htmlFor="bayes">Bayesian</Label>
-                                    </div>
-                                </RadioGroup>
-                            </div>
-                            
-                            <Button type="submit" className="w-full" disabled={mutation.isPending || (!file && !demoMode)}>
-                                {mutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChart2 className="mr-2 h-4 w-4" />}
-                                Analyze
-                            </Button>
-                            
-                            <div className="relative">
-                                <div className="absolute inset-0 flex items-center">
-                                    <span className="w-full border-t" />
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Configuration</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label>Data File (CSV/Excel)</Label>
+                                    <Input type="file" accept=".csv, .xlsx" onChange={handleFileChange} />
                                 </div>
-                                <div className="relative flex justify-center text-xs uppercase">
-                                    <span className="bg-white px-2 text-slate-500">Or</span>
+                                
+                                <div className="space-y-2">
+                                    <Label>Variant Column</Label>
+                                    {columns.length > 0 ? (
+                                        <Select onValueChange={v => setValue("variant_col", v)} value={variantCol}>
+                                            <SelectTrigger><SelectValue placeholder="Select column" /></SelectTrigger>
+                                            <SelectContent>
+                                                {columns.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <Input placeholder="e.g. group" {...register("variant_col", { required: true })} />
+                                    )}
                                 </div>
-                            </div>
-                            
-                            <Button type="button" variant="outline" className="w-full" onClick={loadDemoData}>
-                                Load Demo Data
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
+                                
+                                <div className="space-y-2">
+                                    <Label>Metric Column</Label>
+                                    {columns.length > 0 ? (
+                                        <Select onValueChange={v => setValue("metric_col", v)} value={metricCol}>
+                                            <SelectTrigger><SelectValue placeholder="Select column" /></SelectTrigger>
+                                            <SelectContent>
+                                                {columns.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <Input placeholder="e.g. converted" {...register("metric_col", { required: true })} />
+                                    )}
+                                </div>
+                                
+                                <div className="space-y-2">
+                                    <Label>Metric Type</Label>
+                                    <Select onValueChange={v => setValue("metric_type", v)} defaultValue="binary">
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="binary">Binary</SelectItem>
+                                            <SelectItem value="continuous">Continuous</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                    <Label>Control Group Label</Label>
+                                    <Input placeholder="e.g. Control" {...register("control_label", { required: true })} />
+                                </div>
+                                
+                                <div className="space-y-2">
+                                    <Label>Covariate (Optional)</Label>
+                                    {columns.length > 0 ? (
+                                        <Select onValueChange={v => setValue("covariate_col", v)} value={covariateCol}>
+                                            <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">None</SelectItem>
+                                                {columns.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <Input placeholder="e.g. pre_experiment_activity" {...register("covariate_col")} />
+                                    )}
+                                </div>
+                                
+                                <div className="space-y-2">
+                                    <Label>Analysis</Label>
+                                    <RadioGroup defaultValue="frequentist" onValueChange={v => setValue("analysis_type", v)}>
+                                        <div className="flex items-center space-x-2">
+                                            <RadioGroupItem value="frequentist" id="freq" />
+                                            <Label htmlFor="freq">Frequentist</Label>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <RadioGroupItem value="bayesian" id="bayes" />
+                                            <Label htmlFor="bayes">Bayesian</Label>
+                                        </div>
+                                    </RadioGroup>
+                                </div>
+                                
+                                <Button type="submit" className="w-full" disabled={mutation.isPending || (!file && !demoMode)}>
+                                    {mutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChart2 className="mr-2 h-4 w-4" />}
+                                    Analyze
+                                </Button>
+                                
+                                <div className="relative">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <span className="w-full border-t" />
+                                    </div>
+                                    <div className="relative flex justify-center text-xs uppercase">
+                                        <span className="bg-white px-2 text-slate-500">Or</span>
+                                    </div>
+                                </div>
+                                
+                                <Button type="button" variant="outline" className="w-full" onClick={loadDemoData} disabled={previewLoading}>
+                                    {previewLoading && demoMode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Load Random Demo Data"}
+                                </Button>
+                            </form>
+                        </CardContent>
+                    </Card>
+                </div>
                 
-                <div className="md:col-span-2 space-y-6">
+                <div className="lg:col-span-8 space-y-6">
+                    
+                    {/* Preview Card */}
+                    {previewData.length > 0 && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-sm">
+                                    <FileSpreadsheet className="h-4 w-4" />
+                                    Data Preview
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs text-left">
+                                        <thead className="bg-slate-100 dark:bg-slate-800 font-medium">
+                                            <tr>
+                                                {columns.map(c => <th key={c} className="p-2 border-b">{c}</th>)}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {previewData.map((row, i) => (
+                                                <tr key={i} className="border-b">
+                                                    {columns.map(c => <td key={c} className="p-2">{String(row[c])}</td>)}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     {mutation.isError && (
                         <Alert variant="destructive">
                             <AlertTriangle className="h-4 w-4" />
@@ -287,7 +404,7 @@ export default function AnalysisPage() {
                         </>
                     )}
                     
-                    {!mutation.data && !mutation.isPending && (
+                    {!mutation.data && !mutation.isPending && !previewData.length && (
                         <div className="flex h-64 items-center justify-center rounded-lg border border-dashed text-slate-400 dark:border-slate-700">
                             <div className="text-center">
                                 <Upload className="mx-auto h-8 w-8 mb-2" />
