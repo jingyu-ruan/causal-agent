@@ -21,6 +21,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import ReactMarkdown from 'react-markdown'
 import { Loader2, Check, ChevronRight, ChevronLeft, Download } from "lucide-react"
+import { getApiHeaders } from "@/lib/settings"
 
 const formSchema = z.object({
   goal: z.string().min(1, "Experiment Name is required"),
@@ -53,7 +54,7 @@ const API_BASE = "http://localhost:8000/api"
 export function ExperimentWizard() {
   const [step, setStep] = useState(1)
   const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       goal: "",
       hypothesis: "",
@@ -81,7 +82,10 @@ export function ExperimentWizard() {
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/design/power`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+            "Content-Type": "application/json",
+            ...getApiHeaders()
+        },
         body: JSON.stringify({
           baseline_rate: watchAll.baseline_rate,
           mde_abs: watchAll.mde_abs,
@@ -111,7 +115,10 @@ export function ExperimentWizard() {
         Promise.all(points.map(async (mde) => {
             const res = await fetch(`${API_BASE}/design/power`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                    "Content-Type": "application/json",
+                    ...getApiHeaders()
+                },
                 body: JSON.stringify({
                   baseline_rate: watchAll.baseline_rate,
                   mde_abs: mde,
@@ -138,7 +145,10 @@ export function ExperimentWizard() {
     mutationFn: async (values: z.infer<typeof formSchema>) => {
         const res = await fetch(`${API_BASE}/design/plan`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+                "Content-Type": "application/json",
+                ...getApiHeaders()
+            },
             body: JSON.stringify({
                 goal: values.goal,
                 baseline_rate: values.baseline_rate,
@@ -315,9 +325,9 @@ export function ExperimentWizard() {
                                         <ResponsiveContainer width="100%" height="100%">
                                             <AreaChart data={curveData}>
                                                 <CartesianGrid strokeDasharray="3 3" />
-                                                <XAxis dataKey="mde" tickFormatter={val => val.toFixed(3)} />
+                                                <XAxis dataKey="mde" tickFormatter={(val: any) => val.toFixed(3)} />
                                                 <YAxis hide />
-                                                <Tooltip formatter={(val: number) => val.toLocaleString()} labelFormatter={val => `MDE: ${Number(val).toFixed(3)}`} />
+                                                <Tooltip formatter={(val: any) => val.toLocaleString()} labelFormatter={(val: any) => `MDE: ${Number(val).toFixed(3)}`} />
                                                 <Area type="monotone" dataKey="sampleSize" stroke="#4f46e5" fill="#e0e7ff" />
                                             </AreaChart>
                                         </ResponsiveContainer>

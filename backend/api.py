@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Header, Depends
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
 from pydantic import BaseModel
@@ -34,7 +34,7 @@ from causal_agent.schemas import (
 )
 
 router = APIRouter()
-settings = load_settings()
+default_settings = load_settings()
 
 # --- Mock Database ---
 class ExperimentSummary(BaseModel):
@@ -92,18 +92,31 @@ class LLMAdapter:
             return {}
 
 # Initialize services
-llm_adapter = LLMAdapter(settings) if settings.openai_api_key else None
+llm_adapter = LLMAdapter(default_settings) if default_settings.openai_api_key else None
 critic_service = CriticService(llm=llm_adapter)
 
 # Initialize RAG (Global singleton)
 # We assume docs are in ../docs relative to src or root
 docs_path = Path(__file__).parent.parent / "docs"
-rag_service = LocalRAG(settings)
+rag_service = LocalRAG(default_settings)
 if docs_path.exists():
     try:
         rag_service.load_docs(docs_path)
     except Exception as e:
         print(f"Warning: Failed to load RAG docs: {e}")
+
+# --- Helper ---
+def get_settings_override(
+    x_openai_key: str | None = Header(None, alias="X-OpenAI-Key"),
+    x_openai_base_url: str | None = Header(None, alias="X-OpenAI-Base-URL"),
+    x_openai_model: str | None = Header(None, alias="X-OpenAI-Model"),
+) -> Settings:
+    default = load_settings()
+    return Settings(
+        openai_api_key=x_openai_key or default.openai_api_key,
+        openai_base_url=x_openai_base_url or default.openai_base_url,
+        openai_model=x_openai_model or default.openai_model,
+    )
 
 # --- Endpoints ---
 
@@ -126,7 +139,7 @@ def get_dashboard_stats():
     )
 
 @router.post("/design/plan", response_model=ExperimentPlan)
-def design_plan(inputs: ExperimentInputs):
+def design_plan(inputs: ExperimentInputs, settings: Settings = Depends(get_settings_override)):
     ctx = ExperimentContext(
         product_area="Experiment", 
         primary_metric=inputs.primary_metric,
@@ -157,15 +170,20 @@ def design_power(req: PowerRequest):
     return calculate_sample_size(req)
 
 @router.post("/design/critique", response_model=ExperimentSpec)
-def design_critique(spec: ExperimentSpec):
-    return critic_service.review_and_improve(spec.inputs, spec)
+def design_critique(spec: ExperimentSpec, settings: Settings = Depends(get_settings_override)):
+    adapter = LLMAdapter(settings) if settings.openai_api_key else None
+    temp_critic = CriticService(llm=adapter, rag=rag_service)
+    return temp_critic.review_and_improve(spec.inputs, spec)
 
 @router.post("/brain/ask", response_model=BrainResponse)
 async def brain_ask(
     query: str = Form(...),
-    file: UploadFile = File(None)
+    file: UploadFile = File(None),
+    settings: Settings = Depends(get_settings_override)
 ):
-    if not llm_adapter:
+    adapter = LLMAdapter(settings) if settings.openai_api_key else None
+
+    if not adapter:
         return BrainResponse(answer="LLM not configured. Please check your settings.")
     
     context = ""
@@ -212,8 +230,8 @@ async def brain_ask(
     prompt = f"Context:\n{context}\n{file_context}\n\nQuestion: {query}\nAnswer:"
     
     try:
-        resp = llm_adapter.client.chat.completions.create(
-            model=llm_adapter.model,
+        resp = adapter.client.chat.completions.create(
+            model=adapter.model,
             messages=[
                 {"role": "system", "content": "You are a helpful data science assistant."},
                 {"role": "user", "content": prompt}

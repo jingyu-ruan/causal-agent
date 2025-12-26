@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { Loader2, AlertTriangle, Upload, BarChart2, FileSpreadsheet } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ErrorBar } from 'recharts'
 
@@ -397,8 +397,8 @@ export default function AnalysisPage() {
                                             <BarChart data={chartData}>
                                                 <CartesianGrid strokeDasharray="3 3" />
                                                 <XAxis dataKey="name" />
-                                                <YAxis tickFormatter={(val) => `${(val * 100).toFixed(1)}%`} />
-                                                <Tooltip formatter={(val: number) => `${(val * 100).toFixed(2)}%`} />
+                                                <YAxis tickFormatter={(val: any) => `${(val * 100).toFixed(1)}%`} />
+                                                <Tooltip formatter={(val: any) => `${(val * 100).toFixed(2)}%`} />
                                                 <Bar dataKey="lift" fill="#4f46e5" name="Lift">
                                                     <ErrorBar dataKey="error" width={4} strokeWidth={2} stroke="#3730a3" />
                                                 </Bar>

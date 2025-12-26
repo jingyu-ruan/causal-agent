@@ -7,9 +7,26 @@ import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Moon, Sun, User, Shield, Bell } from "lucide-react"
+import { useEffect, useState } from "react"
+import { getSettings, saveSettings, AppSettings } from "@/lib/settings"
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
+  const [settings, setSettings] = useState<AppSettings>({
+    openaiApiKey: "",
+    openaiBaseUrl: "",
+    openaiModel: ""
+  })
+
+  useEffect(() => {
+    setSettings(getSettings())
+  }, [])
+
+  const handleSaveApi = () => {
+    saveSettings(settings)
+    // Optional: show toast
+    alert("API Settings Saved")
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
@@ -75,21 +92,37 @@ export default function SettingsPage() {
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <Shield className="h-5 w-5" />
-                    System & Security
+                    API Configuration
                 </CardTitle>
-                <CardDescription>Configure API connections and security.</CardDescription>
+                <CardDescription>Configure LLM API connections.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="space-y-2">
-                    <Label>OpenAI API Key</Label>
-                    <div className="flex gap-2">
-                        <Input type="password" placeholder="sk-..." className="flex-1" />
-                        <Button>Update</Button>
-                    </div>
-                    <p className="text-xs text-slate-500">
-                        API keys are currently managed via environment variables (.env) for security.
-                    </p>
+                    <Label>API Key</Label>
+                    <Input 
+                        type="password" 
+                        value={settings.openaiApiKey}
+                        onChange={(e) => setSettings({...settings, openaiApiKey: e.target.value})}
+                        placeholder="sk-..." 
+                    />
                 </div>
+                 <div className="space-y-2">
+                    <Label>Base URL</Label>
+                    <Input 
+                        value={settings.openaiBaseUrl}
+                        onChange={(e) => setSettings({...settings, openaiBaseUrl: e.target.value})}
+                        placeholder="https://api.openai.com/v1" 
+                    />
+                </div>
+                 <div className="space-y-2">
+                    <Label>Model</Label>
+                    <Input 
+                        value={settings.openaiModel}
+                        onChange={(e) => setSettings({...settings, openaiModel: e.target.value})}
+                        placeholder="gpt-4" 
+                    />
+                </div>
+                <Button onClick={handleSaveApi}>Save API Settings</Button>
             </CardContent>
         </Card>
       </div>

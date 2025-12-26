@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Search, Calculator, FlaskConical, Brain, Loader2, Upload, FileText } from "lucide-react"
 import ReactMarkdown from "react-markdown"
+import { getApiHeaders } from "@/lib/settings"
 
 export default function DashboardPage() {
   // Brain State
@@ -37,6 +38,7 @@ export default function DashboardPage() {
 
       const res = await fetch("http://localhost:8000/api/brain/ask", {
         method: "POST",
+        headers: getApiHeaders(),
         body: formData,
       })
       const data = await res.json()
