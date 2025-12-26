@@ -5,6 +5,7 @@ import random
 import sys
 from pathlib import Path
 from typing import Any
+from sqlmodel import SQLModel, Field, create_engine, Session, select
 
 import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Header, Depends
@@ -37,27 +38,39 @@ router = APIRouter()
 default_settings = load_settings()
 
 # --- Mock Database ---
-class ExperimentSummary(BaseModel):
-    id: int
+# --- 1. 数据库配置 ---
+# 尝试从环境变量读取数据库地址，如果没有则报错 (本地开发可以用 sqlite)
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./local.db")
+
+# 创建数据库连接引擎
+engine = create_engine(DATABASE_URL)
+
+# --- 2. 定义数据表模型 (SQLModel) ---
+class Experiment(SQLModel, table=True):
+    # table=True 表示这不仅仅是数据验证，还是数据库里的一张表
+    id: int | None = Field(default=None, primary_key=True)
     name: str
     owner: str
     status: str
     metric: str
-    progress: int
+    progress: int = 0
+
+# --- 3. 启动时自动建表 ---
+# 这是一个简单的建表函数，稍后在 main.py 里调用，或者直接在这里并在模块加载时执行(偷懒做法)
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
+
+# 临时 trick：在文件被导入时直接尝试建表 (生产环境通常用 migration 工具，但 MVP 这样最快)
+try:
+    create_db_and_tables()
+except Exception:
+    pass
 
 class DashboardStats(BaseModel):
     total_experiments: int
     active_experiments: int
     drafting_experiments: int
     concluded_experiments: int
-
-MOCK_EXPERIMENTS = [
-    {"id": 1, "name": "Checkout Flow v2", "owner": "Alice", "status": "Running", "metric": "Conversion", "progress": 65},
-    {"id": 2, "name": "New Pricing Tier", "owner": "Bob", "status": "Drafting", "metric": "Revenue", "progress": 0},
-    {"id": 3, "name": "Homepage Hero", "owner": "Charlie", "status": "Analyzing", "metric": "Click-through", "progress": 100},
-    {"id": 4, "name": "Recommendation Algo", "owner": "Alice", "status": "Concluded", "metric": "Retention", "progress": 100},
-    {"id": 5, "name": "Dark Mode", "owner": "Dave", "status": "Running", "metric": "Engagement", "progress": 23},
-]
 
 class BrainRequest(BaseModel):
     query: str
@@ -120,23 +133,28 @@ def get_settings_override(
 
 # --- Endpoints ---
 
-@router.get("/experiments/list", response_model=list[ExperimentSummary])
+@router.get("/experiments/list", response_model=list[Experiment])
 def list_experiments():
-    return MOCK_EXPERIMENTS
+    with Session(engine) as session:
+        statement = select(Experiment)
+        results = session.exec(statement).all()
+        return results
 
 @router.get("/dashboard/stats", response_model=DashboardStats)
 def get_dashboard_stats():
-    total = len(MOCK_EXPERIMENTS)
-    active = sum(1 for e in MOCK_EXPERIMENTS if e["status"] == "Running")
-    drafting = sum(1 for e in MOCK_EXPERIMENTS if e["status"] == "Drafting")
-    concluded = sum(1 for e in MOCK_EXPERIMENTS if e["status"] == "Concluded")
-    
-    return DashboardStats(
-        total_experiments=total,
-        active_experiments=active,
-        drafting_experiments=drafting,
-        concluded_experiments=concluded
-    )
+    with Session(engine) as session:
+        experiments = session.exec(select(Experiment)).all()
+        total = len(experiments)
+        active = sum(1 for e in experiments if e.status == "Running")
+        drafting = sum(1 for e in experiments if e.status == "Drafting")
+        concluded = sum(1 for e in experiments if e.status == "Concluded")
+        
+        return DashboardStats(
+            total_experiments=total,
+            active_experiments=active,
+            drafting_experiments=drafting,
+            concluded_experiments=concluded
+        )
 
 @router.post("/design/plan", response_model=ExperimentPlan)
 def design_plan(inputs: ExperimentInputs, settings: Settings = Depends(get_settings_override)):
@@ -151,6 +169,19 @@ def design_plan(inputs: ExperimentInputs, settings: Settings = Depends(get_setti
         segments=inputs.segments,
         notes=inputs.notes or inputs.goal,
     )
+
+    # [新增] 保存到数据库
+    new_exp = Experiment(
+        name=inputs.goal[:50], # 简单截取一下当标题
+        owner="User",          # 暂时写死
+        status="Drafting",
+        metric=inputs.primary_metric,
+        progress=0
+    )
+    with Session(engine) as session:
+        session.add(new_exp)
+        session.commit()
+
     # Index this experiment for future RAG
     # In a real app we'd save to DB and index asynchronously
     # Here we just index the goal and hypothesis
