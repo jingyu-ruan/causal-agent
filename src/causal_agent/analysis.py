@@ -161,14 +161,14 @@ def analyze_experiment(
             try:
                 t_stat, p_val = stats.ttest_ind(v_df[analysis_metric].dropna(), control_df[analysis_metric].dropna(), equal_var=False)
                 res.p_value = float(p_val)
-                res.is_significant = p_val < 0.05
+                res.is_significant = bool(p_val < 0.05)
                 
                 # CI for difference
                 se_diff = np.sqrt(std**2/n + control_std**2/control_n)
                 diff = mean - control_mean
                 z_crit = 1.96
-                res.ci_lower = diff - z_crit * se_diff
-                res.ci_upper = diff + z_crit * se_diff
+                res.ci_lower = float(diff - z_crit * se_diff)
+                res.ci_upper = float(diff + z_crit * se_diff)
             except Exception as e:
                 warnings.append(f"Test failed for {v}: {e}")
             
