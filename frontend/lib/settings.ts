@@ -9,7 +9,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   openaiBaseUrl: "https://api.deepseek.com",
   openaiModel: "deepseek-chat",
 };
-
 export const SETTINGS_KEY = "causal-agent-settings";
 
 export function getSettings(): AppSettings {

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { BarChart2, Upload, Loader2, AlertCircle, CheckCircle2, FileSpreadsheet, Dices } from "lucide-react"
+import { API_BASE_URL } from "@/lib/config"
 
 interface CausalResult {
   effect: number
@@ -49,7 +50,7 @@ export default function ObservationalPage() {
         formData.append("file", selectedFile)
         
         try {
-            const res = await fetch("http://localhost:8000/api/common/preview", {
+            const res = await fetch(`${API_BASE_URL}/api/common/preview`, {
                 method: "POST",
                 body: formData
             })
@@ -78,7 +79,7 @@ export default function ObservationalPage() {
       setPreviewLoading(true)
       try {
           // Pass current method to generate appropriate data structure
-          const res = await fetch(`http://localhost:8000/api/common/generate_data?type=observational&method=${method}`)
+          const res = await fetch(`${API_BASE_URL}/api/common/generate_data?type=observational&method=${method}`)
           if (!res.ok) throw new Error("Failed to generate data")
           const blob = await res.blob()
           const demoFile = new File([blob], "demo_data.csv", { type: "text/csv" })
@@ -88,7 +89,7 @@ export default function ObservationalPage() {
           const formData = new FormData()
           formData.append("file", demoFile)
           
-          const prevRes = await fetch("http://localhost:8000/api/common/preview", {
+          const prevRes = await fetch(`${API_BASE_URL}/api/common/preview`, {
               method: "POST",
               body: formData
           })
@@ -143,9 +144,9 @@ export default function ObservationalPage() {
       formData.append("treated_unit", treatedUnit)
       formData.append("intervention_time", interventionTime)
     }
-
+  
     try {
-      const res = await fetch("http://localhost:8000/api/causal/analyze", {
+      const res = await fetch(`${API_BASE_URL}/api/causal/analyze`, {
         method: "POST",
         body: formData,
       })

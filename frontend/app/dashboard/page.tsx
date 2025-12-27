@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Search, Calculator, FlaskConical, Brain, Loader2, Upload, FileText } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import { getApiHeaders } from "@/lib/settings"
+import { API_BASE_URL } from "@/lib/config"
 
 export default function DashboardPage() {
   // Brain State
@@ -36,7 +37,7 @@ export default function DashboardPage() {
         formData.append("file", brainFile)
       }
 
-      const res = await fetch("http://localhost:8000/api/brain/ask", {
+      const res = await fetch(`${API_BASE_URL}/api/brain/ask`, {
         method: "POST",
         headers: getApiHeaders(),
         body: formData,
@@ -63,7 +64,7 @@ export default function DashboardPage() {
 
       setCalcLoading(true)
       try {
-        const res = await fetch("http://localhost:8000/api/design/power", {
+        const res = await fetch(`${API_BASE_URL}/api/design/power`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

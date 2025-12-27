@@ -22,6 +22,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import ReactMarkdown from 'react-markdown'
 import { Loader2, Check, ChevronRight, ChevronLeft, Download } from "lucide-react"
 import { getApiHeaders } from "@/lib/settings"
+import { API_BASE_URL } from "@/lib/config"
 
 const formSchema = z.object({
   goal: z.string().min(1, "Experiment Name is required"),
@@ -49,7 +50,7 @@ const PREDEFINED_GUARDRAILS = [
   "Customer Support Tickets"
 ]
 
-const API_BASE = "http://localhost:8000/api"
+const API_BASE = `${API_BASE_URL}/api`
 
 export function ExperimentWizard() {
   const [step, setStep] = useState(1)

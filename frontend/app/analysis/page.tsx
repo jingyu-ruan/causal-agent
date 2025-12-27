@@ -12,8 +12,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { Loader2, AlertTriangle, Upload, BarChart2, FileSpreadsheet } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ErrorBar } from 'recharts'
+import { API_BASE_URL } from "@/lib/config"
 
-const API_BASE = "http://localhost:8000/api"
+const API_BASE = `${API_BASE_URL}/api`
 
 export default function AnalysisPage() {
     const [file, setFile] = useState<File | null>(null)
