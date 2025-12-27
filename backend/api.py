@@ -65,6 +65,9 @@ class Experiment(SQLModel, table=True):
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
 
+# Alias for compatibility with main.py
+init_application = create_db_and_tables
+
 # 临时 trick：在文件被导入时直接尝试建表 (生产环境通常用 migration 工具，但 MVP 这样最快)
 try:
     create_db_and_tables()

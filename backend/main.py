@@ -17,10 +17,14 @@ try:
     # Try to import router and init_application
     # We prioritize relative import as it is cleaner for package structure
     try:
-        from .api import router, init_application
+        from . import api
     except (ImportError, ValueError):
         # Fallback for when running directly
-        from api import router, init_application
+        import api
+    
+    router = api.router
+    init_application = getattr(api, "init_application", None)
+
 except Exception as e:
     import_error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
     print(f"Failed to import api module: {import_error}")
