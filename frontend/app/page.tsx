@@ -3,6 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Beaker, BarChart2, ArrowRight } from "lucide-react"
 import Link from "next/link"
+// Force rebuild: v1.0
 
 export default function Home() {
   return (
