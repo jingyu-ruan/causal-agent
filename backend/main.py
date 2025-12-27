@@ -15,19 +15,12 @@ import_error = None
 
 try:
     # Try to import router and init_application
-    # We try both relative and absolute imports to handle different running contexts
+    # We prioritize relative import as it is cleaner for package structure
     try:
-        try:
-            from .api import router, init_application
-        except (ImportError, ValueError):
-            from api import router, init_application
+        from .api import router, init_application
     except (ImportError, ValueError):
-        # If that fails, maybe init_application is missing? Try just router
-        try:
-            from .api import router
-        except (ImportError, ValueError):
-            from api import router
-        init_application = None
+        # Fallback for when running directly
+        from api import router, init_application
 except Exception as e:
     import_error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
     print(f"Failed to import api module: {import_error}")
@@ -45,7 +38,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Causal Agent API", lifespan=lifespan)
 
-# --- 关键修改在这里 ---
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",

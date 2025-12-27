@@ -52,6 +52,7 @@ engine = create_engine(
 # --- 2. 定义数据表模型 (SQLModel) ---
 class Experiment(SQLModel, table=True):
     # table=True 表示这不仅仅是数据验证，还是数据库里的一张表
+    __table_args__ = {"extend_existing": True}
     id: int | None = Field(default=None, primary_key=True)
     name: str
     owner: str
@@ -471,3 +472,6 @@ async def causal_analyze(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+# Alias for compatibility with main.py
+init_application = create_db_and_tables
