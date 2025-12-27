@@ -1,4 +1,4 @@
-"use client"
+"use client" 
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Beaker, BarChart2, ArrowRight } from "lucide-react"
@@ -87,3 +87,4 @@ export default function Home() {
     </div>
   )
 }
+
