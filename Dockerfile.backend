@@ -2,22 +2,21 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends gcc g++ && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-COPY pyproject.toml .
-
-# Install python dependencies
-RUN pip install --no-cache-dir .
-RUN pip install chromadb
-
+COPY pyproject.toml README.md ./
 COPY src/ src/
+
+# Install the package and every backend runtime dependency declared in pyproject.toml.
+RUN python -m pip install --upgrade pip \
+    && python -m pip install --no-cache-dir .
+
 COPY backend/ backend/
 COPY docs/ docs/
-
-# Install local package
-RUN pip install -e .
 
 EXPOSE 8000
 

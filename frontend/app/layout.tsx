@@ -1,15 +1,28 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Sidebar } from "@/components/sidebar";
 
-const inter = Inter({ subsets: ["latin"] });
-
 export const metadata: Metadata = {
-  title: "Causal Agent",
-  description: "A/B Testing Experiment Design Platform",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://causal-agent-sage.vercel.app"),
+  title: {
+    default: "Causal Decision Agent",
+    template: "%s · Causal Decision Agent",
+  },
+  description: "Build a causal study through conversation, watch the tools run, and keep every decision tied to inspectable evidence.",
+  openGraph: {
+    title: "Causal Decision Agent",
+    description: "Build the study through conversation.",
+    type: "website",
+    images: [{ url: "/og-causal-decision-v3.png", width: 1733, height: 907, alt: "Causal Decision conversation and execution workspace" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Causal Decision Agent",
+    description: "Build the study through conversation.",
+    images: ["/og-causal-decision-v3.png"],
+  },
 };
 
 export default function RootLayout({
@@ -18,14 +31,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} antialiased`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className="antialiased">
         <Providers>
-          <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50">
+          <div className="min-h-screen bg-background text-foreground">
             <Sidebar />
-            <main className="flex-1 overflow-y-auto p-8">
-              {children}
-            </main>
+            <main className="min-h-[calc(100vh-4.25rem)]">{children}</main>
           </div>
         </Providers>
         <SpeedInsights />

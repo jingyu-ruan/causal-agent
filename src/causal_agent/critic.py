@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from causal_agent.rag import LocalRAG
 from causal_agent.schemas import ExperimentInputs, ExperimentSpec
 
+if TYPE_CHECKING:
+    from causal_agent.rag import LocalRAG
+
 _SYSTEM = """You are a strict reviewer of experiment plans.
-Return ONLY valid JSON with keys: edits (list), risks_add (list), questions_add (list), improved_fields (object).
+Return ONLY valid JSON with keys: edits (list), risks_add (list), improved_fields (object).
 No markdown. No extra keys.
 """
 
@@ -39,13 +41,8 @@ Return JSON:
 {{
   "edits": ["short bullets describing what you changed"],
   "risks_add": ["risk strings to add"],
-  "questions_add": ["open questions to add"],
   "improved_fields": {{
-     "hypothesis": "optional string",
-     "design.ramp_plan": "optional string",
-     "analysis.srm_check": "optional string",
-     "analysis.segment_policy": "optional string",
-     "analysis.stopping_rule": "optional string"
+     "hypothesis": "optional string"
   }}
 }}
 """
@@ -57,30 +54,15 @@ Return JSON:
         fields = out.get("improved_fields", {}) or {}
         if isinstance(fields, dict):
             if "hypothesis" in fields and isinstance(fields["hypothesis"], str):
-                improved.hypothesis = fields["hypothesis"].strip()
-
-            if "design.ramp_plan" in fields and isinstance(fields["design.ramp_plan"], str):
-                improved.design.ramp_plan = fields["design.ramp_plan"].strip()
-
-            if "analysis.srm_check" in fields and isinstance(fields["analysis.srm_check"], str):
-                improved.analysis.srm_check = fields["analysis.srm_check"].strip()
-
-            if "analysis.segment_policy" in fields and isinstance(fields["analysis.segment_policy"], str):
-                improved.analysis.segment_policy = fields["analysis.segment_policy"].strip()
-
-            if "analysis.stopping_rule" in fields and isinstance(fields["analysis.stopping_rule"], str):
-                improved.analysis.stopping_rule = fields["analysis.stopping_rule"].strip()
+                improved.plan.hypothesis = fields["hypothesis"].strip()
 
         risks_add = out.get("risks_add", [])
         if isinstance(risks_add, list):
-            improved.risks.extend([str(x) for x in risks_add if str(x).strip()])
-
-        q_add = out.get("questions_add", [])
-        if isinstance(q_add, list):
-            improved.open_questions.extend([str(x) for x in q_add if str(x).strip()])
+            improved.plan.risks.extend([str(x) for x in risks_add if str(x).strip()])
 
         # de-dup
-        improved.risks = list(dict.fromkeys([r.strip() for r in improved.risks if r.strip()]))
-        improved.open_questions = list(dict.fromkeys([q.strip() for q in improved.open_questions if q.strip()]))
+        improved.plan.risks = list(
+            dict.fromkeys(r.strip() for r in improved.plan.risks if r.strip())
+        )
 
         return improved

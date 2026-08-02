@@ -1,9 +1,5 @@
-import { ExperimentWizard } from "@/components/experiment-wizard";
+import { redirect } from "next/navigation"
 
-export default function NewExperimentPage() {
-  return (
-    <div className="container mx-auto py-6">
-      <ExperimentWizard />
-    </div>
-  );
+export default function LegacyExperimentPage() {
+  redirect("/studies/new?mode=prospective")
 }

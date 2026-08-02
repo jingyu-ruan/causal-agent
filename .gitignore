@@ -17,6 +17,10 @@ pip-wheel-metadata/
 .mypy_cache/
 .ruff_cache/
 
+# Node / Next.js
+node_modules/
+.next/
+
 # Jupyter
 .ipynb_checkpoints/
 
@@ -26,4 +30,10 @@ Thumbs.db
 
 # Outputs
 outputs/
-# logs
+
+# Generated application state
+/local.db
+/chroma_db/
+
+# Logs
+*.log
