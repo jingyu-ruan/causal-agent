@@ -52,7 +52,8 @@ def _dataset_hash(df: pd.DataFrame) -> str:
         row_hashes = pd.util.hash_pandas_object(
             stringified, index=False, categorize=True
         ).to_numpy()
-    row_hashes.sort()
+    # pandas 3 may expose this buffer as read-only; np.sort returns a new array.
+    row_hashes = np.sort(row_hashes)
     schema = [(str(column), str(canonical[column].dtype)) for column in columns]
     digest = hashlib.sha256()
     digest.update(json.dumps(schema, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))

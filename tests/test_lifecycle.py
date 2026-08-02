@@ -17,6 +17,28 @@ from causal_agent.lifecycle import (
     analyze_study,
     create_study_design,
 )
+from causal_agent.lifecycle.analysis import _dataset_hash
+
+
+def test_dataset_hash_handles_read_only_pandas_hash_arrays(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    read_only_hashes = np.array([2, 1], dtype=np.uint64)
+    read_only_hashes.flags.writeable = False
+
+    class ReadOnlyHashResult:
+        def to_numpy(self) -> np.ndarray:
+            return read_only_hashes
+
+    monkeypatch.setattr(
+        pd.util,
+        "hash_pandas_object",
+        lambda *args, **kwargs: ReadOnlyHashResult(),
+    )
+
+    frame = pd.DataFrame({"value": [1, 2]})
+    assert _dataset_hash(frame) == _dataset_hash(frame)
+    assert read_only_hashes.tolist() == [2, 1]
 
 
 def _continuous_rct_request(*, cuped: bool = False) -> StudyDesignRequest:
