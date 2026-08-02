@@ -1,20 +1,18 @@
+from __future__ import annotations
+
 import io
 import json
 import os
 import random
-import sys
 from pathlib import Path
-from typing import Any
-from sqlmodel import SQLModel, Field, create_engine, Session, select
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Header, Depends
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
 from pydantic import BaseModel
-
-# Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
+from sqlmodel import Session, select
 
 from causal_agent.analysis import ExperimentAnalysis, analyze_experiment, analyze_observational
 from causal_agent.causal import CausalResult
@@ -22,7 +20,6 @@ from causal_agent.config import Settings, load_settings
 from causal_agent.critic import CriticService
 from causal_agent.planner import build_plan
 from causal_agent.power import calculate_sample_size
-from causal_agent.rag import LocalRAG
 from causal_agent.schemas import (
     AnalysisType,
     ExperimentContext,
@@ -34,54 +31,24 @@ from causal_agent.schemas import (
     PowerResult,
 )
 
+from .database import create_db_and_tables, engine
+from .models import Experiment
+from .uploads import read_upload_bytes
+
+if TYPE_CHECKING:
+    from causal_agent.rag import LocalRAG
+
 router = APIRouter()
 default_settings = load_settings()
 
-# --- Mock Database ---
-# --- 1. 数据库配置 ---
-# 尝试从环境变量读取数据库地址，如果没有则报错 (本地开发可以用 sqlite)
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./local.db")
-
-# 创建数据库连接引擎
-# 增加 pool_pre_ping=True 参数
-engine = create_engine(
-    DATABASE_URL, 
-    pool_pre_ping=True
-)
-
-# --- 2. 定义数据表模型 (SQLModel) ---
-class Experiment(SQLModel, table=True):
-    # table=True 表示这不仅仅是数据验证，还是数据库里的一张表
-    __table_args__ = {"extend_existing": True}
-    id: int | None = Field(default=None, primary_key=True)
-    name: str
-    owner: str
-    status: str
-    metric: str
-    progress: int = 0
-
-# --- 3. 启动时自动建表 ---
-# 这是一个简单的建表函数，稍后在 main.py 里调用，或者直接在这里并在模块加载时执行(偷懒做法)
-def create_db_and_tables():
-    SQLModel.metadata.create_all(engine)
-
 # Alias for compatibility with main.py
 init_application = create_db_and_tables
-
-# 临时 trick：在文件被导入时直接尝试建表 (生产环境通常用 migration 工具，但 MVP 这样最快)
-try:
-    create_db_and_tables()
-except Exception:
-    pass
 
 class DashboardStats(BaseModel):
     total_experiments: int
     active_experiments: int
     drafting_experiments: int
     concluded_experiments: int
-
-class BrainRequest(BaseModel):
-    query: str
 
 class BrainResponse(BaseModel):
     answer: str
@@ -112,32 +79,43 @@ class LLMAdapter:
             print(f"LLM Error: {e}")
             return {}
 
-# Initialize services
-llm_adapter = LLMAdapter(default_settings) if default_settings.openai_api_key else None
-critic_service = CriticService(llm=llm_adapter)
+# RAG is legacy/optional. Keep it lazy so importing the API does not download an
+# embedding model or block a cold start. The lifecycle workflow does not depend
+# on RAG for any numerical result.
+_rag_service: LocalRAG | None = None
 
-# Initialize RAG (Global singleton)
-# We assume docs are in ../docs relative to src or root
-docs_path = Path(__file__).parent.parent / "docs"
-rag_service = LocalRAG(default_settings)
-if docs_path.exists():
+
+def get_rag_service() -> LocalRAG | None:
+    global _rag_service
+    if os.environ.get("ENABLE_RAG", "false").lower() not in {"1", "true", "yes"}:
+        return None
+    if _rag_service is not None:
+        return _rag_service
+
+    docs_path = Path(__file__).parent.parent / "docs"
     try:
-        rag_service.load_docs(docs_path)
-    except Exception as e:
-        print(f"Warning: Failed to load RAG docs: {e}")
+        from causal_agent.rag import LocalRAG
+
+        _rag_service = LocalRAG(default_settings)
+        if docs_path.exists():
+            _rag_service.load_docs(docs_path)
+    except Exception as exc:
+        print(f"Warning: Failed to initialize RAG: {exc}")
+        return None
+    return _rag_service
 
 # --- Helper ---
-def get_settings_override(
-    x_openai_key: str | None = Header(None, alias="X-OpenAI-Key"),
-    x_openai_base_url: str | None = Header(None, alias="X-OpenAI-Base-URL"),
-    x_openai_model: str | None = Header(None, alias="X-OpenAI-Model"),
-) -> Settings:
-    default = load_settings()
-    return Settings(
-        openai_api_key=x_openai_key or default.openai_api_key,
-        openai_base_url=x_openai_base_url or default.openai_base_url,
-        openai_model=x_openai_model or default.openai_model,
-    )
+def get_server_settings() -> Settings:
+    """Return server-owned LLM configuration.
+
+    The previous API accepted an arbitrary base URL from a request header while
+    falling back to the server API key. That combination could disclose the
+    server key to an attacker-controlled host and also created an SSRF surface.
+    Provider configuration is now exclusively controlled by the deployment.
+    """
+
+    return load_settings()
+
 
 # --- Endpoints ---
 
@@ -165,7 +143,7 @@ def get_dashboard_stats():
         )
 
 @router.post("/design/plan", response_model=ExperimentPlan)
-def design_plan(inputs: ExperimentInputs, settings: Settings = Depends(get_settings_override)):
+def design_plan(inputs: ExperimentInputs, settings: Settings = Depends(get_server_settings)):
     ctx = ExperimentContext(
         product_area="Experiment", 
         primary_metric=inputs.primary_metric,
@@ -189,16 +167,19 @@ def design_plan(inputs: ExperimentInputs, settings: Settings = Depends(get_setti
     with Session(engine) as session:
         session.add(new_exp)
         session.commit()
+        session.refresh(new_exp)
 
     # Index this experiment for future RAG
     # In a real app we'd save to DB and index asynchronously
     # Here we just index the goal and hypothesis
     try:
-        rag_service.index_experiment(
-            exp_id=f"exp_{inputs.goal[:10]}", 
-            content=f"Goal: {inputs.goal}\nMetric: {inputs.primary_metric}\nPlan: {inputs.notes}", 
-            metadata={"metric": inputs.primary_metric}
-        )
+        rag_service = get_rag_service()
+        if rag_service is not None:
+            rag_service.index_experiment(
+                exp_id=f"exp_{new_exp.id}",
+                content=f"Goal: {inputs.goal}\nMetric: {inputs.primary_metric}\nNotes: {inputs.notes}",
+                metadata={"metric": inputs.primary_metric},
+            )
     except Exception:
         pass # don't fail plan generation if RAG fails
 
@@ -209,16 +190,16 @@ def design_power(req: PowerRequest):
     return calculate_sample_size(req)
 
 @router.post("/design/critique", response_model=ExperimentSpec)
-def design_critique(spec: ExperimentSpec, settings: Settings = Depends(get_settings_override)):
+def design_critique(spec: ExperimentSpec, settings: Settings = Depends(get_server_settings)):
     adapter = LLMAdapter(settings) if settings.openai_api_key else None
-    temp_critic = CriticService(llm=adapter, rag=rag_service)
+    temp_critic = CriticService(llm=adapter, rag=get_rag_service())
     return temp_critic.review_and_improve(spec.inputs, spec)
 
 @router.post("/brain/ask", response_model=BrainResponse)
 async def brain_ask(
     query: str = Form(...),
     file: UploadFile = File(None),
-    settings: Settings = Depends(get_settings_override)
+    settings: Settings = Depends(get_server_settings)
 ):
     adapter = LLMAdapter(settings) if settings.openai_api_key else None
 
@@ -227,15 +208,16 @@ async def brain_ask(
     
     context = ""
     try:
-        results = rag_service.query(query)
-        context = "\n".join([r['document'] for r in results])
+        rag_service = get_rag_service()
+        if rag_service is not None:
+            context = "\n".join(rag_service.retrieve(query, k=4))
     except Exception:
         pass
         
     file_context = ""
     if file:
         try:
-            content = await file.read()
+            content = await read_upload_bytes(file)
             if file.filename.endswith('.csv'):
                  df = pd.read_csv(io.BytesIO(content), nrows=10)
                  file_context = f"\nUploaded File Preview:\n{df.to_markdown()}"
@@ -285,7 +267,7 @@ async def brain_ask(
 @router.post("/common/preview", response_model=PreviewResponse)
 async def common_preview(file: UploadFile = File(...)):
     try:
-        contents = await file.read()
+        contents = await read_upload_bytes(file)
         if file.filename and file.filename.endswith('.xlsx'):
             df = pd.read_excel(io.BytesIO(contents), nrows=5)
         else:
@@ -390,7 +372,7 @@ async def analysis_upload(
     analysis_type: str = Form("frequentist")
 ):
     try:
-        contents = await file.read()
+        contents = await read_upload_bytes(file)
         if file.filename and file.filename.endswith('.xlsx'):
              df = pd.read_excel(io.BytesIO(contents))
         else:
@@ -434,7 +416,7 @@ async def causal_analyze(
     intervention_time: int | None = Form(None), # For SCM
 ):
     try:
-        contents = await file.read()
+        contents = await read_upload_bytes(file)
         if file.filename and file.filename.endswith('.xlsx'):
              df = pd.read_excel(io.BytesIO(contents))
         else:
