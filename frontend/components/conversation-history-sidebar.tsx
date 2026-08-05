@@ -11,7 +11,6 @@ import {
   Plus,
   Settings2,
   Trash2,
-  Workflow,
   X,
 } from "lucide-react"
 
@@ -34,12 +33,12 @@ type ConversationHistorySidebarProps = {
 export function ConversationHistorySidebar(props: ConversationHistorySidebarProps) {
   return (
     <>
-      <aside className="hidden h-dvh w-[280px] shrink-0 border-r border-border/80 bg-[#f4f4f2] lg:flex lg:flex-col dark:bg-[#17191d]">
+      <aside className="hidden h-dvh w-[280px] shrink-0 border-r border-border/80 bg-sidebar lg:flex lg:flex-col">
         <SidebarContent {...props} />
       </aside>
       {props.open && (
         <div className="fixed inset-0 z-50 bg-slate-950/25 backdrop-blur-sm lg:hidden" onClick={() => props.onOpenChange(false)}>
-          <aside className="flex h-full w-[min(86vw,320px)] flex-col border-r border-border bg-[#f4f4f2] shadow-2xl dark:bg-[#17191d]" onClick={(event) => event.stopPropagation()}>
+          <aside className="flex h-full w-[min(86vw,320px)] flex-col border-r border-border bg-sidebar shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <Button type="button" variant="ghost" size="icon-sm" className="absolute left-[min(calc(86vw-2.75rem),276px)] top-3 z-10 rounded-lg" onClick={() => props.onOpenChange(false)} aria-label="Close conversation history">
               <X className="h-4 w-4" />
             </Button>
@@ -54,10 +53,9 @@ export function ConversationHistorySidebar(props: ConversationHistorySidebarProp
 function SidebarContent(props: ConversationHistorySidebarProps & { onNavigate?: () => void }) {
   return (
     <>
-      <div className="flex h-14 items-center gap-2.5 px-3.5">
-        <Link href="/" className="flex min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1.5" onClick={props.onNavigate}>
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950"><Workflow className="h-4 w-4" /></span>
-          <span className="truncate text-sm font-bold tracking-tight">Causal Decision</span>
+      <div className="flex h-14 items-center px-3.5">
+        <Link href="/" className="min-w-0 rounded-lg px-1.5 py-1.5" onClick={props.onNavigate} aria-label="Causal Agent home">
+          <span className="truncate text-sm font-bold tracking-tight">Causal Agent</span>
         </Link>
       </div>
 
@@ -187,7 +185,7 @@ function ConversationHistoryItem({
         className={cn(
           "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 pr-16 text-left text-sm transition-colors",
           active
-            ? "bg-white text-foreground shadow-sm dark:bg-white/[0.08]"
+            ? "bg-black/[0.055] text-foreground dark:bg-white/[0.08]"
             : "text-muted-foreground hover:bg-white/65 hover:text-foreground dark:hover:bg-white/[0.055]",
         )}
       >

@@ -380,6 +380,33 @@ class ColumnMapping(StrictModel):
     metric_cols: dict[str, str]
     time_col: str | None = None
     covariate_cols: dict[str, str] = Field(default_factory=dict)
+    dimension_cols: tuple[str, ...] = Field(default=(), max_length=6)
+
+    @field_validator("dimension_cols")
+    @classmethod
+    def validate_dimension_columns(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(value)) != len(value):
+            raise ValueError("dimension_cols must be unique")
+        return value
+
+
+CleaningOperationType = Literal[
+    "trim_string_values",
+    "drop_exact_duplicates",
+    "drop_missing_required",
+    "drop_invalid_metric_values",
+    "fill_missing_dimensions",
+]
+
+
+class CleaningOperationRequest(StrictModel):
+    operation: CleaningOperationType
+    columns: tuple[str, ...] = ()
+
+
+class CleaningPlanExecution(StrictModel):
+    source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    operations: tuple[CleaningOperationRequest, ...] = ()
 
 
 class TransformationLogEntry(FrozenStrictModel):
@@ -403,6 +430,7 @@ class TransformationLogEntry(FrozenStrictModel):
 
 class AnalysisOptions(StrictModel):
     transformation_log: tuple[TransformationLogEntry, ...] = ()
+    cleaning_plan: CleaningPlanExecution | None = None
 
     @model_validator(mode="after")
     def validate_log_sequence(self) -> AnalysisOptions:
@@ -481,6 +509,33 @@ class EventStudyPoint(FrozenStrictModel):
     p_value: float | None = None
 
 
+class ConsistencyTest(FrozenStrictModel):
+    method: Literal["cochran_q_heterogeneity"] = "cochran_q_heterogeneity"
+    statistic: float
+    degrees_freedom: int = Field(ge=1)
+    p_value: float
+    alpha: float = Field(gt=0.0, lt=1.0)
+    consistent: bool
+    interpretation: str
+
+
+class SubgroupEstimate(FrozenStrictModel):
+    dimension: str
+    level: str
+    estimate: MetricEstimate
+    adjusted_p_value: float
+    significant: bool
+    direction: Literal["favorable", "harmful", "neutral"]
+    recommendation: str
+
+
+class DimensionAnalysis(FrozenStrictModel):
+    dimension: str
+    consistency: ConsistencyTest | None = None
+    subgroups: tuple[SubgroupEstimate, ...] = ()
+    skipped_reason: str | None = None
+
+
 class DecisionOutcome(FrozenStrictModel):
     status: DecisionStatus
     summary: str
@@ -496,5 +551,6 @@ class StudyAnalysisResult(FrozenStrictModel):
     primary_estimate: MetricEstimate | None = None
     guardrail_estimates: tuple[MetricEstimate, ...] = ()
     event_study: tuple[EventStudyPoint, ...] = ()
+    dimension_analyses: tuple[DimensionAnalysis, ...] = ()
     decision: DecisionOutcome
     trace: tuple[TraceEvent, ...]

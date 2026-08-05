@@ -3,6 +3,7 @@ import { API_BASE_URL } from "@/lib/config"
 export type StudyMode = "prospective" | "retrospective"
 export type DesignType = "rct" | "did"
 export type MetricType = "binary" | "continuous"
+export type PrimaryDirection = "increase" | "decrease"
 
 export interface GuardrailDefinition {
   name: string
@@ -21,10 +22,13 @@ export interface StudyDesignInput {
   comparison: string
   primary_metric: string
   metric_type: MetricType
+  primary_direction: PrimaryDirection
   success_threshold: number
   guardrails: GuardrailDefinition[]
   design_type: DesignType
   randomization_unit: string
+  control_group: string
+  treatment_group: string
   baseline_rate?: number
   mde?: number
   alpha: number
@@ -111,6 +115,52 @@ export interface AnalyzeOptions {
     persisted: boolean
     details: Record<string, unknown>
   }>
+  cleaning_plan?: CleaningPlanExecution
+}
+
+export type CleaningOperationType =
+  | "trim_string_values"
+  | "drop_exact_duplicates"
+  | "drop_missing_required"
+  | "drop_invalid_metric_values"
+  | "fill_missing_dimensions"
+
+export interface CleaningPlanOperation {
+  id: string
+  operation: CleaningOperationType
+  columns: string[]
+  reason: string
+  affected_rows: number
+  requires_confirmation: boolean
+}
+
+export interface CleaningPlanExecution {
+  source_sha256: string
+  operations: Array<{
+    operation: CleaningOperationType
+    columns: string[]
+  }>
+}
+
+export interface DatasetColumnProfile {
+  name: string
+  dtype: string
+  missing_count: number
+  missing_rate: number
+  unique_count: number
+}
+
+export interface DatasetPreparationProfile {
+  source_sha256: string
+  row_count: number
+  column_count: number
+  columns: DatasetColumnProfile[]
+  exact_duplicate_rows: number
+  duplicate_grain_rows: number
+  suggested_dimensions: string[]
+  operations: CleaningPlanOperation[]
+  blocking_issues: string[]
+  agent_summary: string
 }
 
 export interface ColumnMappingPayload {
@@ -119,6 +169,7 @@ export interface ColumnMappingPayload {
   metric_cols: Record<string, string>
   time_col?: string
   covariate_cols: Record<string, string>
+  dimension_cols?: string[]
 }
 
 const STUDIES_API = `${API_BASE_URL}/api/studies`
@@ -149,7 +200,7 @@ export async function createStudyDesign(input: StudyDesignInput): Promise<StudyR
     primary_metric: {
       name: input.primary_metric,
       kind: input.metric_type,
-      direction: "higher_is_better",
+      direction: input.primary_direction === "decrease" ? "lower_is_better" : "higher_is_better",
       minimum_effect: input.success_threshold,
       harm_tolerance: 0,
     },
@@ -162,8 +213,8 @@ export async function createStudyDesign(input: StudyDesignInput): Promise<StudyR
     })),
     estimand: input.design_type === "rct" ? "ate" : "att",
     retrospective: input.mode === "retrospective",
-    control_group: "control",
-    treatment_group: "treatment",
+    control_group: input.control_group || "control",
+    treatment_group: input.treatment_group || "treatment",
     expected_control_allocation: input.design_type === "rct" ? 1 - treatmentAllocation : undefined,
     expected_treatment_allocation: input.design_type === "rct" ? treatmentAllocation : undefined,
     baseline_value: input.design_type === "rct" ? input.baseline_rate : undefined,
@@ -207,6 +258,23 @@ export async function analyzeStudy(
     body: formData,
   })
   if (!response.ok) throw await apiError(response, "Analysis could not be completed")
+  return response.json()
+}
+
+export async function profileStudyDataset(
+  studyId: string,
+  file: File,
+  mapping: ColumnMappingPayload,
+): Promise<DatasetPreparationProfile> {
+  const formData = new FormData()
+  formData.append("file", file)
+  formData.append("mapping_json", JSON.stringify(mapping))
+
+  const response = await fetch(`${STUDIES_API}/${encodeURIComponent(studyId)}/profile`, {
+    method: "POST",
+    body: formData,
+  })
+  if (!response.ok) throw await apiError(response, "Dataset profile could not be completed")
   return response.json()
 }
 

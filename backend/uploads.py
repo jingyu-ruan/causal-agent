@@ -26,7 +26,7 @@ async def read_upload_bytes(file: UploadFile) -> bytes:
 
 
 def parse_analysis_frame(filename: str | None, content: bytes) -> pd.DataFrame:
-    """Parse the intentionally narrow, analysis-ready data surface."""
+    """Parse the intentionally narrow CSV/Parquet data surface."""
 
     safe_name = Path(filename or "upload.csv").name
     suffix = Path(safe_name).suffix.lower()
@@ -38,7 +38,7 @@ def parse_analysis_frame(filename: str | None, content: bytes) -> pd.DataFrame:
         else:
             raise HTTPException(
                 status_code=415,
-                detail="Study analysis accepts analysis-ready CSV or Parquet files",
+                detail="Study analysis accepts CSV or Parquet files",
             )
     except HTTPException:
         raise

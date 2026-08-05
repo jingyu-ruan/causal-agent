@@ -64,6 +64,8 @@ def test_intake_returns_validated_interactive_blocks(
                             "label": "What decision should this study support?",
                             "control": "textarea",
                             "required": True,
+                            "suggested_value": "Should guided onboarding be rolled out?",
+                            "suggestion_basis": "Based on the stated prospective planning context.",
                             "options": [],
                         }
                     ],
@@ -91,6 +93,10 @@ def test_intake_returns_validated_interactive_blocks(
     assert "mode" in payload["captured_fields"]
     assert "business_question" in payload["missing_fields"]
     assert payload["blocks"][0]["fields"][0]["id"] == "business_question"
+    assert payload["blocks"][0]["fields"][0]["suggested_value"] == (
+        "Should guided onboarding be rolled out?"
+    )
+    assert "suggestion_basis" in payload["blocks"][0]["fields"][0]
     assert payload["ready_to_freeze"] is False
 
 
@@ -117,10 +123,14 @@ def test_server_independently_decides_when_draft_is_ready(
         "comparison": "Current onboarding",
         "primary_metric": "activation_rate",
         "metric_type": "binary",
+        "primary_direction": "increase",
         "success_threshold": 0.01,
         "guardrails": [],
         "design_type": "rct",
         "randomization_unit": "user_id",
+        "control_group": "control",
+        "treatment_group": "treatment",
+        "allocation_treatment": 0.5,
         "baseline_rate": 0.20,
         "traffic_per_day": 1000,
         "metric_window_days": 7,
@@ -203,9 +213,13 @@ def test_malformed_model_form_falls_back_without_losing_confirmed_values(
         "comparison": "Current homepage",
         "primary_metric": "click_rate",
         "metric_type": "continuous",
+        "primary_direction": "increase",
         "success_threshold": 0.02,
         "design_type": "rct",
         "randomization_unit": "user",
+        "control_group": "control",
+        "treatment_group": "treatment",
+        "allocation_treatment": 0.5,
         "baseline_rate": 0.4,
         "outcome_standard_deviation": 0.2,
         "traffic_per_day": 10000,
@@ -272,9 +286,13 @@ def test_guardrail_form_is_always_presented_as_natural_language(
         "comparison": "Current homepage",
         "primary_metric": "click_rate",
         "metric_type": "binary",
+        "primary_direction": "increase",
         "success_threshold": 0.02,
         "design_type": "rct",
         "randomization_unit": "user",
+        "control_group": "control",
+        "treatment_group": "treatment",
+        "allocation_treatment": 0.5,
         "baseline_rate": 0.4,
         "traffic_per_day": 10000,
         "metric_window_days": 7,
@@ -343,9 +361,13 @@ def test_agent_converts_natural_language_guardrails_to_structured_rules(
         "comparison": "Current homepage",
         "primary_metric": "click_rate",
         "metric_type": "binary",
+        "primary_direction": "increase",
         "success_threshold": 0.02,
         "design_type": "rct",
         "randomization_unit": "user",
+        "control_group": "control",
+        "treatment_group": "treatment",
+        "allocation_treatment": 0.5,
         "baseline_rate": 0.4,
         "traffic_per_day": 10000,
         "metric_window_days": 7,
@@ -380,3 +402,97 @@ def test_agent_converts_natural_language_guardrails_to_structured_rules(
     ]
     assert "guardrails" in payload["captured_fields"]
     assert payload["ready_to_freeze"] is True
+
+
+def test_agent_suggestion_is_not_captured_until_the_user_accepts_it(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        agent_module,
+        "_safe_model_call",
+        lambda **_: {
+            "message": "Here is a planning reference for the minimum effect.",
+            "draft_patch": {"success_threshold": 0.01},
+            "blocks": [
+                {
+                    "type": "form",
+                    "id": "minimum-effect",
+                    "title": "Minimum worthwhile effect",
+                    "submit_label": "Continue",
+                    "fields": [
+                        {
+                            "id": "success_threshold",
+                            "label": "Smallest worthwhile change",
+                            "control": "number",
+                            "required": True,
+                            "suggested_value": "0.01",
+                            "suggestion_basis": "Planning assumption; replace with business evidence.",
+                            "min": 0,
+                            "step": 0.001,
+                            "options": [],
+                        }
+                    ],
+                }
+            ],
+            "next_action": "collect",
+        },
+    )
+
+    response = client.post(
+        "/api/agent/intake",
+        headers={"X-DeepSeek-API-Key": "test-key"},
+        json={
+            "draft": {"mode": "prospective"},
+            "captured_fields": ["mode"],
+            "locale": "en-US",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert "success_threshold" not in payload["draft_patch"]
+    assert "success_threshold" not in payload["captured_fields"]
+    assert payload["blocks"][0]["fields"][0]["suggested_value"] == "0.01"
+
+
+def test_malformed_model_fallback_adds_contextual_text_and_numeric_suggestions(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        agent_module,
+        "_safe_model_call",
+        lambda **_: {
+            "message": "broken",
+            "draft_patch": {},
+            "blocks": [{"type": "form", "id": "broken", "fields": []}],
+        },
+    )
+    draft = {
+        "mode": "prospective",
+        "business_question": "Should the workflow reduce support contact rate?",
+        "hypothesis": "The guided workflow should reduce avoidable support contacts.",
+        "population": "New users",
+        "intervention": "Guided workflow",
+        "comparison": "Current workflow",
+        "primary_metric": "support_contact_rate",
+        "metric_type": "binary",
+    }
+
+    response = client.post(
+        "/api/agent/intake",
+        headers={"X-DeepSeek-API-Key": "test-key"},
+        json={
+            "draft": draft,
+            "captured_fields": list(draft),
+            "locale": "zh-CN",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    fields = response.json()["blocks"][0]["fields"]
+    assert [field["id"] for field in fields] == ["primary_direction", "success_threshold"]
+    assert fields[0]["suggested_value"] == "decrease"
+    assert fields[1]["suggested_value"] == "0.01"
+    assert "规划假设" in fields[1]["suggestion_basis"]

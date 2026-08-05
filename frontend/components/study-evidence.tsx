@@ -30,6 +30,7 @@ export type NormalizedEvidence = {
   diagnostics: DiagnosticCheck[]
   effect: EffectEstimate
   guardrailEffects: UnknownRecord[]
+  dimensionAnalyses: UnknownRecord[]
   decision: UnknownRecord
   memo: string
   trace: AgentTraceStep[]
@@ -92,6 +93,7 @@ export function normalizeEvidence(payload: StudyRecord): NormalizedEvidence {
     diagnostics,
     effect: primaryEstimate as EffectEstimate,
     guardrailEffects: asArray(study.guardrail_estimates ?? result.guardrail_estimates).map(asRecord),
+    dimensionAnalyses: asArray(study.dimension_analyses ?? result.dimension_analyses).map(asRecord),
     decision,
     memo: typeof memoValue === "string" ? memoValue : "",
     trace: asArray(traceValue).map((item, index) => {
@@ -119,6 +121,27 @@ export function ContractEvidence({ evidence }: { evidence: NormalizedEvidence })
   )
   const allocation = asArray(design.allocations)
   const designType = String(design.design_type ?? contract.design_type ?? "Study design")
+  const normalizedDesignType = designType.trim().toLowerCase().replaceAll("-", "_").replaceAll(" ", "_")
+  const isDid = ["did", "difference_in_differences"].includes(normalizedDesignType)
+  const designDetails = isDid
+    ? [
+        { label: "Minimum pre-periods", value: formatNumber(design.minimum_pre_periods), mono: true },
+        { label: "Alpha", value: formatNumber(design.alpha), mono: true },
+        { label: "Pre-trend alpha", value: formatNumber(design.pretrend_alpha), mono: true },
+        { label: "Spec hash", value: shortHash(design.spec_hash), mono: true },
+      ]
+    : [
+        { label: "Power", value: formatPercent(design.power), mono: true },
+        { label: "Alpha", value: formatNumber(design.alpha), mono: true },
+        { label: "Allocation", value: allocationLabel(allocation, design), mono: true },
+        { label: "Spec hash", value: shortHash(design.spec_hash), mono: true },
+        ...(design.cuped_covariate
+          ? [
+              { label: "CUPED covariate", value: design.cuped_covariate, mono: true },
+              { label: "Expected correlation", value: formatNumber(design.cuped_expected_correlation), mono: true },
+            ]
+          : []),
+      ]
 
   return (
     <div className="space-y-5">
@@ -137,7 +160,7 @@ export function ContractEvidence({ evidence }: { evidence: NormalizedEvidence })
             { label: "Intervention", value: contract.intervention },
             { label: "Comparator", value: contract.comparator ?? contract.comparison },
             { label: "Primary metric", value: primaryMetric.name ?? contract.primary_metric, mono: true },
-            { label: "Minimum effect", value: formatThreshold(primaryMetric.minimum_effect ?? contract.success_threshold), mono: true },
+            { label: "Minimum effect", value: formatThreshold(primaryMetric.minimum_effect ?? contract.success_threshold, String(primaryMetric.kind ?? ""), String(primaryMetric.direction ?? "")), mono: true },
           ]} />
         </CardContent>
       </Card>
@@ -154,17 +177,12 @@ export function ContractEvidence({ evidence }: { evidence: NormalizedEvidence })
         </CardHeader>
         <CardContent className="p-6">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Required sample</p>
-            <p className="metric-number mt-1 text-3xl font-semibold">{requiredSample === null ? "—" : Math.round(requiredSample).toLocaleString()}</p>
-            <p className="mt-1 text-xs text-slate-500">total analysis units</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{isDid ? "Treatment start" : "Required sample"}</p>
+            <p className="metric-number mt-1 text-3xl font-semibold">{isDid ? String(design.treatment_start ?? "—") : requiredSample === null ? "—" : Math.round(requiredSample).toLocaleString()}</p>
+            <p className="mt-1 text-xs text-slate-500">{isDid ? "pre-committed intervention boundary" : "total analysis units"}</p>
           </div>
           <div className="mt-6 border-t border-slate-900/[0.07] pt-2 dark:border-white/10">
-            <EvidenceRows items={[
-              { label: "Power", value: formatPercent(design.power), mono: true },
-              { label: "Alpha", value: formatNumber(design.alpha), mono: true },
-              { label: "Allocation", value: allocationLabel(allocation, design), mono: true },
-              { label: "Spec hash", value: shortHash(design.spec_hash), mono: true },
-            ]} />
+            <EvidenceRows items={designDetails} />
           </div>
         </CardContent>
       </Card>
@@ -465,9 +483,13 @@ function formatPercent(value: unknown): string {
   return number === null ? "—" : `${(number * 100).toFixed(0)}%`
 }
 
-function formatThreshold(value: unknown): string {
+function formatThreshold(value: unknown, kind: string, direction: string): string {
   const number = numberValue(value)
-  return number === null ? "—" : `${number >= 0 ? "+" : ""}${(number * 100).toFixed(2)} pp`
+  if (number === null) return "—"
+  const arrow = direction.toLowerCase() === "lower_is_better" ? "↓" : "↑"
+  return kind.toLowerCase() === "binary"
+    ? `${arrow} ${(number * 100).toFixed(2)} pp`
+    : `${arrow} ${number.toLocaleString(undefined, { maximumFractionDigits: 4 })}`
 }
 
 function formatEffect(value: unknown, kind: string): string {
@@ -505,8 +527,8 @@ function allocationLabel(allocations: unknown[], design: UnknownRecord): string 
   if (allocations.length > 0) {
     return allocations.map((item) => {
       const allocation = asRecord(item)
-      const share = numberValue(allocation.share, allocation.allocation)
-      return `${String(allocation.group ?? allocation.name ?? "group")} ${share === null ? "" : `${(share * 100).toFixed(0)}%`}`
+      const share = numberValue(allocation.fraction, allocation.share, allocation.allocation)
+      return `${String(allocation.label ?? allocation.group ?? allocation.name ?? "group")} ${share === null ? "" : `${(share * 100).toFixed(0)}%`}`
     }).join(" / ")
   }
   const treatment = numberValue(design.expected_treatment_allocation, design.allocation_treatment)

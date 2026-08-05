@@ -7,6 +7,8 @@ from pydantic import ValidationError
 
 from causal_agent.lifecycle import (
     AnalysisOptions,
+    CleaningOperationRequest,
+    CleaningPlanExecution,
     ColumnMapping,
     DecisionStatus,
     DiagnosticStatus,
@@ -353,6 +355,98 @@ def test_transformation_log_must_match_the_analyzed_dataset() -> None:
     assert _diagnostic(result, "transformation_lineage").status == DiagnosticStatus.FAIL
     assert result.primary_estimate is None
     assert result.decision.status == DecisionStatus.INSUFFICIENT_EVIDENCE
+
+
+def test_confirmed_cleaning_plan_is_deterministic_logged_and_keeps_raw_data_unchanged() -> None:
+    artifact = create_study_design(_continuous_rct_request())
+    raw = _continuous_rct_data()
+    raw.loc[0, "outcome"] = np.nan
+    raw = pd.concat([raw, raw.iloc[[1]]], ignore_index=True)
+    original = raw.copy(deep=True)
+    options = AnalysisOptions(
+        cleaning_plan=CleaningPlanExecution(
+            source_sha256="a" * 64,
+            operations=(
+                CleaningOperationRequest(operation="drop_exact_duplicates"),
+                CleaningOperationRequest(
+                    operation="drop_missing_required",
+                    columns=("id", "group", "outcome", "latency_ms"),
+                ),
+            ),
+        )
+    )
+
+    result = analyze_study(raw, artifact, _rct_mapping(), options)
+
+    pd.testing.assert_frame_equal(raw, original)
+    assert result.dataset.row_count == len(raw) - 2
+    assert [item.operation for item in result.dataset.transformations] == [
+        "drop_exact_duplicates",
+        "drop_missing_required",
+    ]
+    assert result.dataset.transformations[0].details["affected_rows"] == 1
+    assert result.dataset.transformations[1].details["affected_rows"] == 1
+    assert _diagnostic(result, "missing_required_values").status == DiagnosticStatus.PASS
+    assert result.primary_estimate is not None
+
+
+def _dimension_rct_data(effects: tuple[float, ...]) -> pd.DataFrame:
+    rows: list[dict[str, float | int | str]] = []
+    for dimension_index, effect in enumerate(effects):
+        level = chr(ord("A") + dimension_index)
+        for group in ("control", "treatment"):
+            for offset, baseline in enumerate(np.linspace(-1.0, 1.0, 60)):
+                rows.append(
+                    {
+                        "id": f"{level}-{group}-{offset}",
+                        "group": group,
+                        "outcome": 10.0 + baseline + (effect if group == "treatment" else 0.0),
+                        "latency_ms": 5.0 + baseline * 0.1,
+                        "region": level,
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def test_dimension_analysis_reports_holm_significance_and_consistent_cochran_q() -> None:
+    artifact = create_study_design(_continuous_rct_request())
+    mapping = _rct_mapping().model_copy(update={"dimension_cols": ("region",)})
+
+    result = analyze_study(_dimension_rct_data((1.0, 1.0, 1.0)), artifact, mapping)
+
+    analysis = result.dimension_analyses[0]
+    assert analysis.consistency is not None
+    assert analysis.consistency.method == "cochran_q_heterogeneity"
+    assert analysis.consistency.consistent is True
+    assert analysis.consistency.p_value == pytest.approx(1.0)
+    assert len(analysis.subgroups) == 3
+    assert all(item.significant for item in analysis.subgroups)
+    assert all(item.direction == "favorable" for item in analysis.subgroups)
+
+
+def test_dimension_analysis_detects_heterogeneity_without_overriding_overall_decision() -> None:
+    artifact = create_study_design(_continuous_rct_request())
+    mapping = _rct_mapping().model_copy(update={"dimension_cols": ("region",)})
+
+    result = analyze_study(_dimension_rct_data((-1.0, 1.0, 3.0)), artifact, mapping)
+
+    analysis = result.dimension_analyses[0]
+    assert analysis.consistency is not None
+    assert analysis.consistency.consistent is False
+    assert analysis.consistency.p_value < artifact.design.alpha
+    assert {item.direction for item in analysis.subgroups} == {"favorable", "harmful"}
+    assert result.decision.status in {DecisionStatus.GO, DecisionStatus.HOLD}
+
+
+def test_cochran_q_is_not_claimed_for_only_two_subgroups() -> None:
+    artifact = create_study_design(_continuous_rct_request())
+    mapping = _rct_mapping().model_copy(update={"dimension_cols": ("region",)})
+
+    result = analyze_study(_dimension_rct_data((1.0, 1.0)), artifact, mapping)
+
+    analysis = result.dimension_analyses[0]
+    assert analysis.consistency is None
+    assert "at least three" in (analysis.skipped_reason or "")
 
 
 def test_planned_sample_size_warning_prevents_an_early_go() -> None:

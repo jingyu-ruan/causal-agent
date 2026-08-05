@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button"
 
 const principles = [
   { title: "Answer in conversation", body: "The Agent asks for one decision-critical detail at a time and turns each answer into a structured contract.", icon: MessageSquareText },
-  { title: "Watch the work happen", body: "API calls, Python analysis, validation gates, and persisted artifacts appear in the run panel as they execute.", icon: SquareTerminal },
+  { title: "Inspect the completed work", body: "Each API call, Python analysis, validation gate, and persisted artifact is recorded after that stage completes.", icon: SquareTerminal },
   { title: "Keep the evidence inspectable", body: "Every conclusion links back to the frozen design, dataset version, diagnostics, and decision policy.", icon: ShieldCheck },
 ]
 
@@ -28,7 +28,7 @@ export default function Home() {
       <section className="border-b border-border/80">
         <div className="page-shell grid gap-12 py-16 lg:grid-cols-[0.86fr_1.14fr] lg:items-center lg:py-24">
           <div className="max-w-2xl">
-            <p className="eyebrow"><span className="h-1.5 w-1.5 rounded-full bg-slate-500" /> Causal decision agent</p>
+            <p className="eyebrow"><span className="h-1.5 w-1.5 rounded-full bg-slate-500" /> Causal Agent</p>
             <h1 className="mt-6 text-balance text-5xl font-extrabold leading-[1.02] tracking-[-0.055em] text-slate-950 sm:text-6xl dark:text-slate-100">Build the study through conversation.</h1>
             <p className="mt-6 max-w-xl text-pretty text-lg leading-8 text-muted-foreground">Describe the decision in your own words. The Agent will clarify assumptions, compile the design, run the tools, and show you exactly where it is in the process.</p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -40,7 +40,7 @@ export default function Home() {
             <div className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
               {[
                 "No long intake form",
-                "Real execution trace",
+                "Auditable execution log",
                 "Deterministic analysis",
               ].map((item) => <span key={item} className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5" />{item}</span>)}
             </div>
@@ -55,7 +55,7 @@ export default function Home() {
           <div>
             <p className="eyebrow">A different interaction model</p>
             <h2 className="mt-4 text-3xl font-extrabold text-slate-950 sm:text-4xl dark:text-slate-100">The interface follows the Agent, not a form schema.</h2>
-            <p className="mt-4 max-w-md text-sm leading-7 text-muted-foreground">You stay in one conversation while the right side becomes a live record of planning, tool use, and evidence production.</p>
+            <p className="mt-4 max-w-md text-sm leading-7 text-muted-foreground">You stay in one conversation while the right side becomes an inspectable record of planning, tool use, and evidence production.</p>
           </div>
           <div className="divide-y divide-border border-y border-border">
             {principles.map((item, index) => {

@@ -27,14 +27,17 @@ flowchart LR
     E --> F
     F --> G["DataContract"]
     G --> H["Execute outside the tool"]
-    H --> I["Upload analysis-ready data"]
-    I --> J["Profile and validate"]
-    J --> K{"Diagnostics credible?"}
-    K -->|"No"| L["Insufficient evidence / redesign"]
-    K -->|"Yes"| M["Deterministic estimate"]
+    H --> I["Upload CSV or Parquet"]
+    I --> J["Profile and propose cleaning"]
+    J --> K["Human confirms plan"]
+    K --> Q["Deterministic cleaning on a copy"]
+    Q --> R{"Diagnostics credible?"}
+    R -->|"No"| L["Insufficient evidence / redesign"]
+    R -->|"Yes"| M["Deterministic estimate"]
     M --> N["Critic and decision rules"]
-    N --> O{"Go / Hold / Stop"}
-    O --> P["Memo, provenance, next iteration"]
+    N --> S["Adjusted drilldowns and consistency"]
+    S --> O{"Go / Hold / Stop"}
+    O --> P["Interactive report and provenance"]
     L --> P
 ```
 
@@ -42,8 +45,8 @@ flowchart LR
 
 | Layer | Responsibilities | Must not do |
 | --- | --- | --- |
-| Agent workflow | clarify the question, construct the contract, select a supported design, route checks, explain results | fabricate an effect, p-value, confidence interval, or diagnostic |
-| Deterministic core | power, SRM, effect estimation, CUPED, fixed-effects DiD, clustered errors, pre-trend checks, decision rules | silently reinterpret columns or repair risky data |
+| Agent workflow | clarify the question, construct the contract, select a supported design, propose allow-listed cleaning, route checks, explain results | fabricate an effect, p-value, confidence interval, diagnostic, or silently execute cleaning |
+| Deterministic core | confirmed cleaning, power, SRM, effect estimation, CUPED, fixed-effects DiD, clustered errors, pre-trend checks, subgroup consistency, decision rules | silently reinterpret columns, impute primary outcomes, or repair unresolved grain conflicts |
 | API and persistence | validate Agent JSON, restrict DeepSeek requests to the official host, validate uploads, freeze artifacts, hash datasets, persist runs, expose health/readiness | persist API keys, log API keys, or accept an arbitrary model endpoint |
 | Web workbench | guide the lifecycle, render Agent-provided form controls, show assumptions and provenance, keep cold-start state honest | treat unconfirmed defaults as user answers or treat a slow free backend as a failed analysis |
 
@@ -53,8 +56,11 @@ flowchart LR
 
 Required analysis data contains a stable unit identifier, treatment assignment,
 the declared primary outcome, all declared guardrails, and any pre-period CUPED
-covariates. The analyzer validates allocation, missingness, duplicates, support,
-sample-ratio mismatch, and outcome type before estimating effects.
+covariates. The profiler proposes explicit handling for safe, detectable issues
+such as exact duplicates, whitespace, missing required values, and invalid metrics.
+After human confirmation, the analyzer applies the plan to a copy, validates
+allocation, grain, support, sample-ratio mismatch, and outcome type, then estimates
+overall and selected low-cardinality subgroup effects.
 
 ### Difference-in-Differences
 
@@ -62,7 +68,8 @@ Required analysis data contains a stable unit identifier, time, treatment-group
 membership, the intervention boundary, the declared outcome, and guardrails.
 The analyzer requires multiple pre-periods, estimates unit and time fixed effects
 with clustered uncertainty, and reports a pre-trend/event-study diagnostic before
-allowing an affirmative decision.
+allowing an affirmative decision. Drilldowns are limited to dimensions that are
+stable within units.
 
 ## Persistence model
 

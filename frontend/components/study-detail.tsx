@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, FileJson2, FilePlus2, FileText, LoaderCircle } from "lucide-react"
+import { ArrowLeft, LoaderCircle } from "lucide-react"
 
 import { useBackendReadiness } from "@/components/backend-readiness"
-import { ContractEvidence, DataContractEvidence, DecisionEvidence, DiagnosticsEvidence, normalizeEvidence, TraceEvidence } from "@/components/study-evidence"
+import { normalizeEvidence } from "@/components/study-evidence"
+import { StudyReport } from "@/components/study-report"
 import { Button } from "@/components/ui/button"
 import { API_BASE_URL } from "@/lib/config"
 import { getStudy, type StudyRecord } from "@/lib/studies-api"
@@ -28,14 +29,22 @@ export function StudyDetail({ studyId }: { studyId: string }) {
 
   const evidence = normalizeEvidence(study)
   return (
-    <div className="page-shell py-10 lg:py-14">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div className="space-y-6 border-b border-slate-950/10 pb-8 dark:border-white/10"><div><Link href="/studies" className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300"><ArrowLeft className="h-3.5 w-3.5" /> All studies</Link><div className="mt-5 flex items-center gap-3"><span className="rounded-md bg-slate-200/70 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.15em] text-slate-950 dark:bg-slate-300/15 dark:text-slate-200">Evidence record</span><code className="text-[10px] text-muted-foreground">{studyId.slice(0, 12)}</code></div><h1 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-5xl dark:text-slate-100">{String(evidence.contract.title ?? study.name ?? "Causal evidence record")}</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">{String(evidence.contract.business_question ?? "Versioned contract, diagnostics, estimate, and decision memo.")}</p></div><div className="flex flex-wrap gap-2"><Button asChild variant="outline" className="rounded-lg"><a href={`${API_BASE_URL}/api/studies/${encodeURIComponent(studyId)}/artifact`} download><FileJson2 /> Design JSON</a></Button>{Object.keys(evidence.decision).length > 0 && <Button asChild variant="outline" className="rounded-lg"><a href={`${API_BASE_URL}/api/studies/${encodeURIComponent(studyId)}/memo`} download><FileText /> Decision memo</a></Button>}<Button asChild className="rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-950 dark:hover:bg-white"><Link href="/studies/new"><FilePlus2 /> New study</Link></Button></div></div>
-        <ContractEvidence evidence={evidence} />
-        <DataContractEvidence evidence={evidence} />
-        <DiagnosticsEvidence evidence={evidence} />
-        <DecisionEvidence evidence={evidence} />
-        <TraceEvidence evidence={evidence} />
+    <div className="px-5 py-10 sm:px-8 lg:py-14">
+      <div className="mx-auto max-w-4xl">
+        <header className="border-b border-border pb-8">
+          <Link href="/studies" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" />All studies</Link>
+          <p className="mt-7 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Evidence report · {studyId.slice(0, 12)}</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{String(evidence.contract.title ?? study.name ?? "Causal evidence report")}</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">{String(evidence.contract.business_question ?? "Versioned contract, diagnostics, estimate, and decision.")}</p>
+          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+            <a className="underline decoration-border underline-offset-4 hover:decoration-foreground" href={`${API_BASE_URL}/api/studies/${encodeURIComponent(studyId)}/artifact`} download>Download design JSON</a>
+            {Object.keys(evidence.decision).length > 0 && <a className="underline decoration-border underline-offset-4 hover:decoration-foreground" href={`${API_BASE_URL}/api/studies/${encodeURIComponent(studyId)}/memo`} download>Download decision memo</a>}
+            <Link className="underline decoration-border underline-offset-4 hover:decoration-foreground" href="/studies/new">Start a new study</Link>
+          </div>
+        </header>
+        <main className="pt-8">
+          <StudyReport evidence={evidence} />
+        </main>
       </div>
     </div>
   )
