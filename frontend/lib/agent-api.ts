@@ -12,14 +12,20 @@ export type AgentDraftField =
   | "comparison"
   | "primary_metric"
   | "metric_type"
+  | "primary_direction"
   | "success_threshold"
   | "guardrails"
   | "design_type"
   | "randomization_unit"
+  | "control_group"
+  | "treatment_group"
+  | "allocation_treatment"
   | "baseline_rate"
   | "outcome_standard_deviation"
   | "traffic_per_day"
   | "metric_window_days"
+  | "cuped_covariate"
+  | "cuped_expected_correlation"
   | "treatment_start"
   | "minimum_pre_periods"
   | "notes"
@@ -44,6 +50,8 @@ export type AgentField = {
   required: boolean
   placeholder?: string | null
   helper_text?: string | null
+  suggested_value?: string | null
+  suggestion_basis?: string | null
   options: AgentOption[]
   min?: number | null
   max?: number | null
@@ -88,14 +96,20 @@ const AGENT_DRAFT_FIELDS: AgentDraftField[] = [
   "comparison",
   "primary_metric",
   "metric_type",
+  "primary_direction",
   "success_threshold",
   "guardrails",
   "design_type",
   "randomization_unit",
+  "control_group",
+  "treatment_group",
+  "allocation_treatment",
   "baseline_rate",
   "outcome_standard_deviation",
   "traffic_per_day",
   "metric_window_days",
+  "cuped_covariate",
+  "cuped_expected_correlation",
   "treatment_start",
   "minimum_pre_periods",
   "notes",

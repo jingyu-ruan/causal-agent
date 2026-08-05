@@ -15,11 +15,12 @@ flowchart LR
     A["Decision question"] --> B["Causal contract"]
     B --> C["Frozen RCT or DiD design"]
     C --> D["Data contract"]
-    D --> E["Upload analysis-ready data"]
-    E --> F["Diagnostics"]
-    F --> G["Deterministic estimate"]
-    G --> H["Go / Hold / Stop / Insufficient evidence"]
-    H --> I["Memo and provenance"]
+    D --> E["Upload data"]
+    E --> F["Profile and confirm cleaning plan"]
+    F --> G["Diagnostics and deterministic estimate"]
+    G --> H["Consistency drilldowns"]
+    H --> I["Go / Hold / Stop / Insufficient evidence"]
+    I --> J["Interactive report and provenance"]
 ```
 
 There are two honest entry points:
@@ -36,12 +37,14 @@ and full lifecycle.
 
 | Design | Before the study | After the study |
 | --- | --- | --- |
-| Randomized A/B | binary or continuous power, unequal allocation, duration, guardrails, optional CUPED plan | schema and unit-grain validation, SRM, binary/continuous estimates, CUPED, confidence intervals, frozen decision rules |
-| Difference-in-Differences | ATT contract, intervention boundary, minimum pre-periods, data grain, guardrails | unit/time fixed effects, unit-clustered uncertainty, event study, joint pre-trend gate, frozen decision rules |
+| Randomized A/B | binary or continuous power, unequal allocation, duration, guardrails, optional CUPED plan | confirmed cleaning, schema and unit-grain validation, SRM, binary/continuous estimates, CUPED, subgroup consistency, frozen decision rules |
+| Difference-in-Differences | ATT contract, intervention boundary, minimum pre-periods, data grain, guardrails | confirmed cleaning, unit/time fixed effects, unit-clustered uncertainty, event study, joint pre-trend gate, stable-dimension drilldowns, frozen decision rules |
 
-Study analysis accepts analysis-ready CSV or Parquet files. Required columns are
-declared before upload. Missing required values, duplicate grain, treatment-label
-drift, and other risky problems are reported rather than silently cleaned.
+Study analysis accepts CSV or Parquet files. Required columns are declared before
+upload. A metadata-only profile proposes allow-listed cleaning operations, and the
+user must confirm each plan before deterministic code applies it to a working copy.
+Primary outcomes are never imputed, raw uploads remain unchanged, and non-identical
+duplicate grain or other unresolved identification problems still block analysis.
 
 ## Agent versus statistics
 
@@ -57,6 +60,10 @@ question and hypothesis. Values submitted through any generated form are merged
 by field ID before DeepSeek plans the next question, so confirmed numbers are not
 re-extracted from display text. If a model response violates the form schema, the
 server preserves confirmed values and returns a deterministic recovery form.
+Generated fields can include a context-aware reference answer. The frontend reveals
+it as gray ghost text, and leaving the field blank accepts it only when the user
+explicitly clicks Continue. Suggested numerical values are labelled as planning
+assumptions and do not enter the confirmed draft before that action.
 Guardrails are collected in ordinary language; DeepSeek converts them to structured
 rules, and the server still validates the resulting metric, direction, and tolerance.
 
@@ -65,7 +72,8 @@ Each analysis persists:
 - the immutable design hash and causal/data contracts;
 - an order-insensitive dataset snapshot hash plus the raw upload SHA-256;
 - explicit transformation lineage;
-- diagnostics, estimates, decision rationale, and agent trace;
+- diagnostics, estimates, Holm-adjusted subgroup results, Cochran's Q heterogeneity
+  checks where at least three estimable subgroups exist, decision rationale, and trace;
 - an immutable run record, while the source dataset itself is not retained.
 
 ## Stack
@@ -174,6 +182,7 @@ initialization.
 | `POST /api/studies/design` | validate and freeze a `StudyDesignRequest` |
 | `GET /api/studies` | list persisted studies |
 | `GET /api/studies/{id}` | retrieve contracts, latest result, and run history |
+| `POST /api/studies/{id}/profile` | profile an upload and propose a confirmable cleaning and drilldown plan |
 | `POST /api/studies/{id}/analyze` | analyze a CSV/Parquet upload against the frozen contract |
 | `GET /api/studies/{id}/artifact` | download the frozen design JSON |
 | `GET /api/studies/{id}/memo` | download the deterministic decision memo |
@@ -228,12 +237,12 @@ Priority is depth and credibility, not a long menu of shallow estimators.
 The full prioritization and success criteria live in
 [docs/roadmap.md](docs/roadmap.md).
 
-1. Add an explicit data-profile and transformation-confirmation step, plus
-   downloadable decision memos and design artifacts.
-2. Add sensitivity and falsification checks: placebo dates, robustness windows,
+1. Add sensitivity and falsification checks: placebo dates, robustness windows,
    attrition/missingness policies, and multiple-testing policy.
-3. Add an evaluation harness for agent routing and explanations, with numerical
+2. Add an evaluation harness for agent routing and explanations, with numerical
    faithfulness checks against the deterministic result object.
+3. Add authenticated workspaces and role-based approval for frozen designs and
+   cleaning plans.
 4. Expand methods only with a complete contract, diagnostics, simulations, and
    failure-case fixtures—for example regression discontinuity or doubly robust
    observational estimation.

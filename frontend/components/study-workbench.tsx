@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useTheme } from "next-themes"
 import {
   AlertCircle,
-  ArrowRight,
   Braces,
   Check,
   CheckCircle2,
@@ -34,6 +33,7 @@ import { AgentFormCard } from "@/components/agent-form-card"
 import { AgentSettingsDialog } from "@/components/agent-settings"
 import { useBackendReadiness } from "@/components/backend-readiness"
 import { ConversationHistorySidebar } from "@/components/conversation-history-sidebar"
+import { DataPreparationPanel } from "@/components/data-preparation-panel"
 import { normalizeEvidence, type NormalizedEvidence } from "@/components/study-evidence"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -65,7 +65,9 @@ import {
   createStudyDesign,
   getStudy,
   getStudyId,
+  profileStudyDataset,
   type AgentTraceStep,
+  type DatasetPreparationProfile,
   type StudyDesignInput,
   type StudyRecord,
 } from "@/lib/studies-api"
@@ -78,6 +80,7 @@ type ConversationStage =
   | "freezing"
   | "data"
   | "mapping"
+  | "cleaning"
   | "lineage"
   | "analysis"
   | "complete"
@@ -104,6 +107,8 @@ type ActivityEvent = {
   label: string
   detail?: string
   status: ActivityStatus
+  startedAt?: number
+  completedAt?: number
 }
 
 const DESIGN_TRACE_STEPS = new Set([
@@ -119,9 +124,11 @@ const TRACE_NARRATION: Record<string, string> = {
   freeze_design_spec: "The design specification is frozen. I’m declaring the expected evidence schema next.",
   declare_expected_schema: "The data contract is declared. The frozen design is ready for a dataset.",
   snapshot_dataset: "The uploaded dataset is hashed and tied to its recorded lineage. I’m running the evidence gates next.",
+  execute_confirmed_cleaning_plan: "The confirmed cleaning plan ran on a working copy. Every operation and row-count change is now in the lineage log.",
   run_frozen_evidence_gates: "The deterministic diagnostics are complete. I’m executing the estimator declared by the design.",
   deterministic_rct_estimator: "The randomized AB estimate is complete. I’m applying the frozen decision thresholds next.",
   two_way_fixed_effects_clustered_estimator: "The Difference-in-Differences estimate is complete. I’m applying the frozen decision thresholds next.",
+  subgroup_consistency_analysis: "The exploratory drilldowns are complete, including Holm-adjusted subgroup tests and Cochran’s Q where the data supports it.",
   apply_frozen_thresholds: "The pre-committed primary and guardrail rules have been evaluated.",
 }
 
@@ -139,6 +146,7 @@ type ColumnMapping = {
   time_col: string
   metric_cols: Record<string, string>
   covariate_cols: Record<string, string>
+  dimension_cols: string[]
 }
 
 type ConversationCheckpoint = {
@@ -185,6 +193,8 @@ function openingMessage(): ChatMessage {
           required: true,
           placeholder: "例如：新版首页是否提升了用户次日留存率？",
           helper_text: "清晰描述你希望评估的改变或决策。",
+          suggested_value: "新版首页是否能提升符合条件用户的次日留存率？",
+          suggestion_basis: "演示用参考回答；后续问题会基于你已经填写的内容生成。",
           options: [],
         },
         {
@@ -194,6 +204,8 @@ function openingMessage(): ChatMessage {
           required: true,
           placeholder: "例如：新版首页使次日留存率提高 2 个百分点。",
           helper_text: "写出预期的因果方向及其机制。",
+          suggested_value: "新版首页通过更清晰地呈现核心内容，使次日留存率至少提高 1 个百分点。",
+          suggestion_basis: "基于上面的业务问题生成的可检验假设。",
           options: [],
         },
       ],
@@ -230,6 +242,10 @@ export function StudyWorkbench() {
   const [isDraggingFile, setIsDraggingFile] = useState(false)
   const [columns, setColumns] = useState<string[]>([])
   const [mapping, setMapping] = useState<ColumnMapping>(() => defaultMapping(startingInput))
+  const [preparationProfile, setPreparationProfile] = useState<DatasetPreparationProfile | null>(null)
+  const [selectedOperationIds, setSelectedOperationIds] = useState<string[]>([])
+  const [selectedDimensions, setSelectedDimensions] = useState<string[]>([])
+  const [lineageConfirmed, setLineageConfirmed] = useState(false)
   const [activities, setActivities] = useState<ActivityEvent[]>([])
   const [busy, setBusy] = useState(false)
   const [typing, setTyping] = useState(false)
@@ -255,8 +271,6 @@ export function StudyWorkbench() {
   const quickReplies = repliesFor(stage, file)
   const agentApiConfigured = Boolean(agentSettings.apiKey.trim())
   const settingsOpen = settingsRequested || (!agentApiConfigured && !settingsDismissed && conversationHydrated && !conversationLoading)
-  const activeConversationTitle = conversations.find((conversation) => conversation.id === conversationId)?.title
-    ?? conversationTitle(input, messages)
 
   const makeSnapshot = (): ConversationSnapshot => ({
     version: 1,
@@ -280,7 +294,7 @@ export function StudyWorkbench() {
     const restoredActivities = restoredConversation.activities
     const restoredStage = snapshot.stage === "freezing"
       ? "review"
-      : ["mapping", "lineage", "analysis"].includes(snapshot.stage)
+      : ["mapping", "cleaning", "lineage", "analysis"].includes(snapshot.stage)
         ? "data"
         : snapshot.stage ?? "intake"
     setInput(restoredInput)
@@ -288,12 +302,16 @@ export function StudyWorkbench() {
     setMessages(restoredMessages)
     setCapturedFields(Array.isArray(snapshot.captured_fields) ? snapshot.captured_fields : [])
     setActiveFormMessageId(snapshot.active_form_message_id ?? (restoredMessages[0]?.id === OPENING_MESSAGE_ID ? OPENING_MESSAGE_ID : null))
-    setActivities(restoredActivities.map((activity) => activity.status === "running" ? { ...activity, status: "error", detail: "Interrupted before this conversation was restored." } : activity))
+    setActivities(restoredActivities.map((activity) => activity.status === "running" ? { ...activity, status: "error", detail: "Interrupted before this conversation was restored.", completedAt: Date.now() } : activity))
     setArtifact(snapshot.artifact ?? null)
     setMapping(snapshot.mapping ?? defaultMapping(restoredInput))
     setCustomConversationTitle(snapshot.custom_title?.trim() || null)
     setFile(null)
     setColumns([])
+    setPreparationProfile(null)
+    setSelectedOperationIds([])
+    setSelectedDimensions([])
+    setLineageConfirmed(false)
     setDraft("")
     setBusy(false)
     setTyping(false)
@@ -514,9 +532,9 @@ export function StudyWorkbench() {
     setActivities((current) => [...current, {
       id: activityId,
       kind: "api",
-      label: `DeepSeek · ${settings.model}`,
-      detail: "Analyze answer and plan the next question",
+      label: "Agent reasoning",
       status: "running",
+      startedAt: Date.now(),
     }])
     appendTool(activityId)
 
@@ -537,7 +555,7 @@ export function StudyWorkbench() {
       appendAgent(response.message, response.ready_to_freeze ? "review" : "text", response.blocks)
       setStage(response.ready_to_freeze ? "review" : "intake")
       setActivities((current) => current.map((item) => item.id === activityId
-        ? { ...item, detail: response.ready_to_freeze ? "Contract ready for review" : `${response.missing_fields.length} fields still open`, status: "done" }
+        ? { ...item, status: "done", completedAt: Date.now() }
         : item))
     } catch (caught) {
       const message = errorMessage(caught)
@@ -545,7 +563,7 @@ export function StudyWorkbench() {
       setStage(previousStage)
       setActiveFormMessageId(previousActiveFormMessageId)
       setActivities((current) => current.map((item) => item.id === activityId
-        ? { ...item, detail: message, status: "error" }
+        ? { ...item, detail: message, status: "error", completedAt: Date.now() }
         : item))
       if (isFailedToFetchError(caught)) {
         setRetryAgentRequest(() => () => {
@@ -671,9 +689,13 @@ export function StudyWorkbench() {
     setActivities((current) => current.slice(0, restored.activitiesLength))
     setArtifact(restored.artifact)
     setMapping(restored.mapping)
-    if (restored.stage !== "mapping" && restored.stage !== "lineage") {
+    if (restored.stage !== "mapping" && restored.stage !== "cleaning" && restored.stage !== "lineage") {
       setFile(null)
       setColumns([])
+      setPreparationProfile(null)
+      setSelectedOperationIds([])
+      setSelectedDimensions([])
+      setLineageConfirmed(false)
     }
     setError(null)
     pendingEditedMessageRef.current = editedText
@@ -687,7 +709,7 @@ export function StudyWorkbench() {
 
     if (stage === "data") {
       appendUser(answer)
-      ask("data", "At this point I need the analysis-ready dataset. Attach a CSV or Parquet file with the paperclip; I’ll inspect the schema before anything runs.")
+      ask("data", "Attach the CSV or Parquet file with the paperclip. I’ll inspect its schema and propose an explicit cleaning plan before anything changes.")
       return
     }
 
@@ -695,6 +717,11 @@ export function StudyWorkbench() {
       appendUser(answer)
       if (/use|confirm|looks right|使用|确认|没问题/i.test(answer)) confirmMapping()
       else handleMappingCorrection(answer)
+      return
+    }
+    if (stage === "cleaning") {
+      appendUser(answer)
+      ask("cleaning", "Review the proposed operations and drilldown dimensions above, then use “Confirm plan and analyze”. You can also upload a replacement file.")
       return
     }
     if (stage === "lineage") {
@@ -720,6 +747,10 @@ export function StudyWorkbench() {
     if (label === "Upload another file") {
       setFile(null)
       setColumns([])
+      setPreparationProfile(null)
+      setSelectedOperationIds([])
+      setSelectedDimensions([])
+      setLineageConfirmed(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
       setStage("data")
       appendUser(label)
@@ -730,7 +761,7 @@ export function StudyWorkbench() {
     handleAnswer(label)
   }
 
-  const canAttachDataset = !busy && (stage === "data" || stage === "mapping")
+  const canAttachDataset = !busy && (stage === "data" || stage === "mapping" || stage === "cleaning")
 
   const handleFileDragEnter = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -767,6 +798,10 @@ export function StudyWorkbench() {
       return
     }
     setFile(selected)
+    setPreparationProfile(null)
+    setSelectedOperationIds([])
+    setSelectedDimensions([])
+    setLineageConfirmed(false)
     setError(null)
     appendUser(`Attached ${selected.name}`, selected.name)
     setBusy(true)
@@ -811,13 +846,58 @@ export function StudyWorkbench() {
     else ask("mapping", `Updated. The mapping is now ${mappingSummary(corrected, input)}. Confirm to continue.`)
   }
 
-  const confirmMapping = () => {
+  const confirmMapping = async () => {
     const issues = mappingIssues(mapping, columns, input)
     if (issues.length) {
       ask("mapping", `I still need valid columns for: ${issues.join(", ")}. Reply with role=column pairs.`)
       return
     }
-    ask("lineage", "Before I run anything: confirm there was no unrecorded outcome-dependent cleaning, row deletion, imputation, or window change applied to this file.")
+    if (!artifact || !studyId || !file) {
+      setError("A frozen design and dataset are required before profiling.")
+      return
+    }
+    setStage("cleaning")
+    setBusy(true)
+    setError(null)
+    const activityId = nextActivityId("file-profile")
+    setActivities((current) => [...current, {
+      id: activityId,
+      kind: "python",
+      label: "Profile data and propose a cleaning plan",
+      detail: file.name,
+      status: "running",
+      startedAt: Date.now(),
+    }])
+    appendTool(activityId)
+    try {
+      const profile = await profileStudyDataset(studyId, file, {
+        unit_col: mapping.unit_col,
+        treatment_col: mapping.treatment_col,
+        metric_cols: mapping.metric_cols,
+        ...(input.design_type === "did" ? { time_col: mapping.time_col } : {}),
+        covariate_cols: mapping.covariate_cols,
+        dimension_cols: mapping.dimension_cols,
+      })
+      setPreparationProfile(profile)
+      setSelectedOperationIds(profile.operations.map((operation) => operation.id))
+      setSelectedDimensions(profile.suggested_dimensions)
+      setMapping((current) => ({ ...current, dimension_cols: profile.suggested_dimensions }))
+      setLineageConfirmed(false)
+      setActivities((current) => current.map((activity) => activity.id === activityId
+        ? { ...activity, status: "done", detail: `${profile.row_count.toLocaleString()} rows · ${profile.operations.length} proposed operation(s)`, completedAt: Date.now() }
+        : activity))
+      appendAgent("I profiled the upload without sending raw rows to the language model. Review the cleaning plan and the proposed drilldown dimensions below; nothing has been changed yet.")
+    } catch (caught) {
+      const message = errorMessage(caught)
+      setError(message)
+      setActivities((current) => current.map((activity) => activity.id === activityId
+        ? { ...activity, status: "error", detail: message, completedAt: Date.now() }
+        : activity))
+      appendAgent(`I couldn’t prepare a cleaning plan: ${message}`)
+      setStage("mapping")
+    } finally {
+      setBusy(false)
+    }
   }
 
   const freezeDesign = async () => {
@@ -862,8 +942,12 @@ export function StudyWorkbench() {
   }
 
   const runAnalysis = async () => {
-    if (!artifact || !studyId || !file) {
+    if (!artifact || !studyId || !file || !preparationProfile) {
       setError("A frozen design and dataset are required before analysis.")
+      return
+    }
+    if (!lineageConfirmed) {
+      setError("Confirm the upstream lineage and cleaning plan before analysis.")
       return
     }
     if (readiness.state !== "ready") {
@@ -884,8 +968,26 @@ export function StudyWorkbench() {
         metric_cols: mapping.metric_cols,
         ...(input.design_type === "did" ? { time_col: mapping.time_col } : {}),
         covariate_cols: mapping.covariate_cols,
+        dimension_cols: selectedDimensions,
       }
-      const result = await analyzeStudy(studyId, file, mappingPayload, { transformation_log: [] })
+      const selectedOperations = preparationProfile.operations
+        .filter((operation) => selectedOperationIds.includes(operation.id))
+        .map((operation) => ({
+          operation: operation.operation,
+          columns: operation.operation === "fill_missing_dimensions"
+            ? operation.columns.filter((column) => selectedDimensions.includes(column))
+            : operation.operation === "trim_string_values"
+              ? operation.columns.filter((column) => !preparationProfile.suggested_dimensions.includes(column) || selectedDimensions.includes(column))
+              : operation.columns,
+        }))
+        .filter((operation) => operation.operation === "drop_exact_duplicates" || operation.columns.length > 0)
+      const result = await analyzeStudy(studyId, file, mappingPayload, {
+        transformation_log: [],
+        cleaning_plan: {
+          source_sha256: preparationProfile.source_sha256,
+          operations: selectedOperations,
+        },
+      })
       let detail: StudyRecord | null = null
       try {
         detail = await getStudy(studyId)
@@ -911,7 +1013,7 @@ export function StudyWorkbench() {
       setError(message)
       setActivities((current) => current.map((item) => item.id === requestId ? { ...item, detail: message, status: "error" } : item))
       appendAgent(`The analysis stopped before a decision was produced: ${message}`)
-      setStage("lineage")
+      setStage("cleaning")
     } finally {
       setBusy(false)
     }
@@ -955,16 +1057,10 @@ export function StudyWorkbench() {
           onDelete={removeConversation}
         />
 
-        <section className="flex min-w-0 flex-1 flex-col" aria-label="Study conversation">
-          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/75 bg-background/90 px-3 backdrop-blur-xl sm:px-5">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <Button type="button" variant="ghost" size="icon-sm" className="rounded-lg lg:hidden" onClick={() => setConversationSidebarOpen(true)} aria-label="Open conversation history"><PanelLeft className="h-4 w-4" /></Button>
-              <div className="min-w-0">
-                <h1 className="truncate text-sm font-semibold">{activeConversationTitle}</h1>
-                {conversationId && <code className="block truncate text-[9px] text-muted-foreground">{conversationId}</code>}
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
+        <section className="relative flex min-w-0 flex-1 flex-col" aria-label="Study conversation">
+          <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-14 items-center justify-between px-3 sm:px-5">
+            <Button type="button" variant="ghost" size="icon-sm" className="pointer-events-auto rounded-lg lg:hidden" onClick={() => setConversationSidebarOpen(true)} aria-label="Open conversation history"><PanelLeft className="h-4 w-4" /></Button>
+            <div className="pointer-events-auto ml-auto flex items-center gap-1">
               <Button type="button" variant="ghost" size="icon-sm" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")} className="rounded-lg text-muted-foreground" aria-label="Toggle color theme" title="Toggle color theme">
                 <Moon className="h-4 w-4 dark:hidden" />
                 <Sun className="hidden h-4 w-4 dark:block" />
@@ -973,7 +1069,7 @@ export function StudyWorkbench() {
             </div>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-6 sm:px-6">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-6 pt-20 sm:px-6">
             <div className="mx-auto max-w-3xl space-y-6">
               {conversationLoading && !conversationHydrated && <p className="py-10 text-center text-sm text-muted-foreground">Loading conversation…</p>}
               {readiness.state === "unavailable" && (
@@ -997,7 +1093,20 @@ export function StudyWorkbench() {
                   onResend={resendEditedMessage}
                 />
               ))}
-              {typing && <TypingMessage />}
+              {stage === "cleaning" && preparationProfile && (
+                <DataPreparationPanel
+                  profile={preparationProfile}
+                  selectedOperationIds={selectedOperationIds}
+                  selectedDimensions={selectedDimensions}
+                  lineageConfirmed={lineageConfirmed}
+                  busy={busy}
+                  onToggleOperation={(id, checked) => setSelectedOperationIds((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))}
+                  onToggleDimension={(dimension, checked) => setSelectedDimensions((current) => checked ? [...new Set([...current, dimension])] : current.filter((item) => item !== dimension))}
+                  onLineageConfirmed={setLineageConfirmed}
+                  onConfirm={() => void runAnalysis()}
+                />
+              )}
+              {typing && !activities.some((activity) => activity.id.startsWith("agent-") && activity.status === "running") && <TypingMessage />}
               {historyError && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">History sync paused: {historyError}</div>}
               {error && (
                 <div role="alert" className="flex max-w-2xl items-start gap-3 rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-100"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span className="min-w-0 flex-1">{error}</span>{retryAgentRequest && <Button type="button" variant="ghost" size="icon-sm" onClick={retryFailedAgentRequest} className="-my-1 shrink-0 text-rose-800 hover:bg-rose-100 hover:text-rose-950 dark:text-rose-100 dark:hover:bg-rose-900/50 dark:hover:text-white" aria-label="Retry agent request" title="Retry"><RefreshCw className="h-4 w-4" /></Button>}</div>
@@ -1048,7 +1157,7 @@ export function StudyWorkbench() {
                 <div className="flex items-center justify-between gap-3 px-1 pb-1">
                   <div className="flex items-center gap-1">
                     <input ref={fileInputRef} type="file" accept=".csv,.parquet" className="sr-only" onChange={(event) => void handleFile(event.target.files?.[0] ?? null)} />
-                    <Button type="button" variant="ghost" size="icon-sm" onClick={() => fileInputRef.current?.click()} disabled={busy || (stage !== "data" && stage !== "mapping")} className="rounded-lg text-muted-foreground" aria-label="Attach dataset" title="Attach CSV or Parquet"><Paperclip className="h-4 w-4 translate-y-0.5" /></Button>
+                    <Button type="button" variant="ghost" size="icon-sm" onClick={() => fileInputRef.current?.click()} disabled={busy || (stage !== "data" && stage !== "mapping" && stage !== "cleaning")} className="rounded-lg text-muted-foreground" aria-label="Attach dataset" title="Attach CSV or Parquet"><Paperclip className="h-4 w-4 translate-y-0.5" /></Button>
                     {!agentApiConfigured && stage === "intake" && <Button type="button" variant="ghost" size="sm" onClick={openAgentSettings} className="rounded-lg text-xs"><KeyRound className="h-3.5 w-3.5" /> Configure DeepSeek</Button>}
                   </div>
                   <Button type="button" size="icon-sm" onClick={() => handleAnswer()} disabled={!draft.trim() || conversationLoading || busy || stage === "complete" || (!agentApiConfigured && stage === "intake")} className="rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white" aria-label="Send message"><Send className="h-4 w-4" /></Button>
@@ -1123,7 +1232,7 @@ function ConversationMessage({
     <article className={cn("flex gap-3", !agent && "justify-end")}>
       <div className={cn("min-w-0", agent ? "max-w-[min(100%,48rem)] flex-1" : "group relative max-w-[min(85%,42rem)]")}>
         {editing ? (
-          <div className="min-w-[min(34rem,78vw)] rounded-2xl border border-slate-300 bg-[#e5e5e1] p-2 shadow-sm dark:border-slate-600 dark:bg-slate-700">
+          <div className="min-w-[min(34rem,78vw)] rounded-2xl border border-border bg-[#f4f4f4] p-2 shadow-sm dark:bg-[#2f2f2f]">
             <Textarea
               value={editText}
               onChange={(event) => setEditText(event.target.value)}
@@ -1149,7 +1258,7 @@ function ConversationMessage({
             </div>
           </div>
         ) : (
-          <div className={cn("whitespace-pre-wrap text-sm leading-6", agent ? "pt-1 text-foreground" : "rounded-2xl rounded-br-md bg-[#e5e5e1] px-4 py-2.5 text-slate-950 dark:bg-slate-700 dark:text-slate-50")}>
+          <div className={cn("whitespace-pre-wrap text-sm leading-6", agent ? "pt-1 text-foreground" : "rounded-2xl rounded-br-md bg-[#f4f4f4] px-4 py-2.5 text-slate-950 dark:bg-[#2f2f2f] dark:text-slate-50")}>
             {message.kind === "attachment" ? <span className="flex items-center gap-2"><FileSpreadsheet className="h-4 w-4" />{message.attachmentName}</span> : message.text}
           </div>
         )}
@@ -1169,22 +1278,57 @@ function ConversationMessage({
 }
 
 function ToolActivityMessage({ activity }: { activity: ActivityEvent }) {
+  const elapsed = useActivityElapsed(activity)
+  const isAgentReasoning = activity.id.startsWith("agent-")
+
+  if (isAgentReasoning) {
+    const label = activity.status === "running"
+      ? `Thinking… ${formatElapsed(elapsed)}`
+      : activity.status === "done"
+        ? `Worked for ${formatElapsed(elapsed)}`
+        : `Stopped after ${formatElapsed(elapsed)}`
+    return (
+      <div
+        className={cn("flex items-center gap-2 py-1 text-xs", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}
+        aria-live={activity.status === "running" ? "polite" : undefined}
+      >
+        <span className={cn("h-2 w-2 rounded-full bg-current", activity.status === "running" && "animate-pulse")} />
+        <span>{label}</span>
+      </div>
+    )
+  }
+
   return (
-    <article className="flex max-w-2xl gap-3" aria-live={activity.status === "running" ? "polite" : undefined}>
+    <article className="flex max-w-2xl items-start gap-2 py-1" aria-live={activity.status === "running" ? "polite" : undefined}>
       <ActivityIcon kind={activity.kind} status={activity.status} />
-      <div className="min-w-0 flex-1 rounded-lg border border-border/75 bg-muted/30 px-3 py-2">
-        <div className="flex items-center justify-between gap-3">
-          <code className="truncate text-[11px] font-semibold text-foreground">{activity.label}</code>
-          <span className={cn("shrink-0 font-mono text-[8px] uppercase tracking-wider", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.status}</span>
-        </div>
-        {activity.detail && <p className={cn("mt-1 text-[10px] leading-4", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.detail}</p>}
+      <div className="min-w-0 flex-1 pt-0.5">
+        <p className={cn("text-[11px] font-medium", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.label}</p>
+        {activity.detail && <p className={cn("mt-0.5 text-[10px] leading-4", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.detail}</p>}
       </div>
     </article>
   )
 }
 
 function TypingMessage() {
-  return <div className="flex items-center gap-1.5 py-2" aria-label="Agent is responding"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.2s]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.1s]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" /></div>
+  return <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground" aria-label="Agent is responding"><span className="h-2 w-2 animate-pulse rounded-full bg-current" /><span>Thinking…</span></div>
+}
+
+function useActivityElapsed(activity: ActivityEvent): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (activity.status !== "running") return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [activity.status])
+  const startedAt = activity.startedAt ?? activity.completedAt ?? now
+  return Math.max(0, (activity.completedAt ?? now) - startedAt)
+}
+
+function formatElapsed(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
 }
 
 function IntakeSummary({ input, capturedFields }: { input: StudyDesignInput; capturedFields: AgentDraftField[] }) {
@@ -1195,9 +1339,11 @@ function IntakeSummary({ input, capturedFields }: { input: StudyDesignInput; cap
     ["Intervention", captured.has("intervention") ? input.intervention : "Not captured"],
     ["Comparator", captured.has("comparison") ? input.comparison : "Not captured"],
     ["Primary metric", captured.has("primary_metric") ? input.primary_metric : "Not captured"],
-    ["Minimum effect", captured.has("success_threshold") ? formatEffect(input.success_threshold, input.metric_type) : "Not captured"],
+    ["Minimum effect", captured.has("success_threshold") ? formatMinimumEffect(input.success_threshold, input.metric_type, input.primary_direction) : "Not captured"],
+    ["Desired direction", captured.has("primary_direction") ? input.primary_direction === "decrease" ? "Lower is better" : "Higher is better" : "Not captured"],
     ["Design", captured.has("design_type") ? input.design_type === "rct" ? "Randomized A/B" : "Difference-in-differences" : "Not captured"],
     ["Analysis unit", captured.has("randomization_unit") ? input.randomization_unit : "Not captured"],
+    ["Group labels", captured.has("control_group") && captured.has("treatment_group") ? `${input.control_group} / ${input.treatment_group}` : "Not captured"],
   ]
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
@@ -1205,7 +1351,7 @@ function IntakeSummary({ input, capturedFields }: { input: StudyDesignInput; cap
       <dl className="grid sm:grid-cols-2">
         {fields.map(([label, value], index) => <div key={label} className={cn("border-border px-4 py-3", index > 1 && "border-t", index % 2 === 1 && "sm:border-l", index === 1 && "border-t sm:border-t-0")}><dt className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{label}</dt><dd className="mt-1.5 text-xs font-medium leading-5">{value}</dd></div>)}
       </dl>
-      <div className="border-t border-border px-4 py-3 text-[11px] leading-5 text-muted-foreground">Planning defaults: α = {input.alpha}, power = {input.power ?? 0.8}. The outcome window is {captured.has("metric_window_days") ? `${input.metric_window_days} days` : "not captured"}. Nothing is frozen until you confirm.</div>
+      <div className="border-t border-border px-4 py-3 text-[11px] leading-5 text-muted-foreground">Planning defaults: α = {input.alpha}, power = {input.power ?? 0.8}{input.design_type === "rct" && captured.has("allocation_treatment") ? `, treatment allocation = ${(input.allocation_treatment ?? 0.5) * 100}%` : ""}. The outcome window is {captured.has("metric_window_days") ? `${input.metric_window_days} days` : "not captured"}. Nothing is frozen until you confirm.</div>
     </div>
   )
 }
@@ -1215,16 +1361,26 @@ function DesignSummary({ evidence, input }: { evidence: NormalizedEvidence; inpu
   const sample = numberValue(design.required_total_sample_size)
   const duration = numberValue(design.estimated_duration_days)
   const specHash = String(design.spec_hash ?? "—")
+  const metrics = input.design_type === "rct"
+    ? [
+        { label: "Method", value: "Randomized A/B" },
+        { label: "Required sample", value: sample === null ? "—" : Math.round(sample).toLocaleString(), mono: true },
+        { label: "Est. duration", value: duration === null ? "—" : `${Math.round(duration)} days`, mono: true },
+        { label: "Primary metric", value: input.primary_metric, mono: true },
+      ]
+    : [
+        { label: "Method", value: "Difference-in-Differences" },
+        { label: "Treatment start", value: String(design.treatment_start ?? input.treatment_start ?? "—"), mono: true },
+        { label: "Min. pre-periods", value: String(design.minimum_pre_periods ?? input.minimum_pre_periods ?? "—"), mono: true },
+        { label: "Primary metric", value: input.primary_metric, mono: true },
+      ]
   return (
     <div className="mt-4 rounded-xl border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-4"><span className="flex items-center gap-2 text-xs font-bold"><CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300" />Design frozen</span><code className="text-[9px] text-muted-foreground">{specHash.length > 14 ? `${specHash.slice(0, 8)}…${specHash.slice(-4)}` : specHash}</code></div>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryMetric label="Method" value={input.design_type === "rct" ? "Randomized A/B" : "DiD"} />
-        <SummaryMetric label="Required sample" value={sample === null ? "—" : Math.round(sample).toLocaleString()} mono />
-        <SummaryMetric label="Est. duration" value={duration === null ? "—" : `${Math.round(duration)} days`} mono />
-        <SummaryMetric label="Primary metric" value={input.primary_metric} mono />
+        {metrics.map((metric) => <SummaryMetric key={metric.label} {...metric} />)}
       </div>
-      <p className="mt-4 border-t border-border pt-3 text-[11px] leading-5 text-muted-foreground"><UploadCloud className="mr-1.5 inline h-3.5 w-3.5" />Attach an analysis-ready CSV or Parquet file below. Raw rows stay inside deterministic analysis tools.</p>
+      <p className="mt-4 border-t border-border pt-3 text-[11px] leading-5 text-muted-foreground"><UploadCloud className="mr-1.5 inline h-3.5 w-3.5" />Attach a CSV or Parquet file below. The Agent will profile it and ask you to confirm any proposed cleaning before analysis.</p>
     </div>
   )
 }
@@ -1235,9 +1391,10 @@ function ResultSummary({ evidence, input, studyId }: { evidence: NormalizedEvide
   const passed = evidence.diagnostics.filter((item) => item.status === "pass").length
   const blocking = evidence.diagnostics.filter((item) => item.status === "fail").length
   return (
-    <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex flex-col gap-4 border-b border-border bg-muted/35 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Decision</p><p className="mt-1 text-lg font-bold capitalize">{status.replaceAll("_", " ")}</p></div><div className="flex gap-6"><SummaryMetric label="Estimate" value={estimate === null ? "—" : formatEffect(estimate, input.metric_type)} mono /><SummaryMetric label="Diagnostics" value={`${passed} pass · ${blocking} block`} mono /></div></div>
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4"><p className="max-w-xl text-xs leading-5 text-muted-foreground">The complete record contains the contract, dataset hash, diagnostic messages, estimate, and agent trace.</p>{studyId && <Button asChild size="sm" variant="outline" className="rounded-lg"><Link href={`/studies/${studyId}`}>Open evidence record <ArrowRight /></Link></Button>}</div>
+    <div className="mt-4 border-y border-border py-4">
+      <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Decision</p>
+      <p className="mt-1 text-lg font-semibold capitalize">{status.replaceAll("_", " ")}</p>
+      <table className="mt-3 w-full border-collapse text-left text-xs"><thead className="border-y border-border text-muted-foreground"><tr><th className="py-2 font-medium">Estimate</th><th className="py-2 font-medium">Diagnostics</th><th className="py-2 font-medium">Report</th></tr></thead><tbody><tr><td className="py-2.5 font-mono">{estimate === null ? "—" : formatEffect(estimate, input.metric_type)}</td><td className="py-2.5 font-mono">{passed} pass · {blocking} block</td><td className="py-2.5">{studyId && <Link className="underline decoration-border underline-offset-4 hover:decoration-foreground" href={`/studies/${studyId}`}>Open interactive report</Link>}</td></tr></tbody></table>
     </div>
   )
 }
@@ -1270,6 +1427,7 @@ function repliesFor(stage: ConversationStage, file: File | null): string[] {
     case "review": return ["Freeze this design", "Change an answer", "Restart intake"]
     case "data": return ["Attach dataset"]
     case "mapping": return file ? ["Use suggested mapping", "Upload another file"] : ["Attach dataset"]
+    case "cleaning": return ["Upload another file"]
     case "lineage": return ["Confirm no unrecorded cleaning", "Upload another file"]
     default: return []
   }
@@ -1277,6 +1435,7 @@ function repliesFor(stage: ConversationStage, file: File | null): string[] {
 
 function placeholderFor(stage: ConversationStage): string {
   if (stage === "data" || stage === "mapping") return "Attach a dataset or describe the column mapping…"
+  if (stage === "cleaning") return "Review the cleaning plan above or attach another dataset…"
   if (stage === "freezing") return "Agent is freezing the design…"
   if (stage === "analysis") return "Agent is running diagnostics and estimation…"
   if (stage === "complete") return "Run complete — open the evidence record or start a new conversation"
@@ -1388,6 +1547,7 @@ function defaultMapping(input: StudyDesignInput): ColumnMapping {
     time_col: input.design_type === "did" ? "time" : "",
     metric_cols: Object.fromEntries([[input.primary_metric, input.primary_metric], ...input.guardrails.map((item) => [item.name, item.name])].filter(([name]) => Boolean(name))),
     covariate_cols: input.cuped_covariate ? { [input.cuped_covariate]: input.cuped_covariate } : {},
+    dimension_cols: [],
   }
 }
 
@@ -1410,6 +1570,7 @@ function suggestMapping(current: ColumnMapping, columns: string[], input: StudyD
     time_col: input.design_type === "did" ? find("time", "date", "period", "week") || current.time_col : "",
     metric_cols: Object.fromEntries(Object.keys(current.metric_cols).map((metric) => [metric, find(metric, "outcome", "metric") || current.metric_cols[metric]])),
     covariate_cols: Object.fromEntries(Object.keys(current.covariate_cols).map((metric) => [metric, find(metric) || current.covariate_cols[metric]])),
+    dimension_cols: current.dimension_cols ?? [],
   }
 }
 
@@ -1455,10 +1616,12 @@ function parseCsvHeader(line: string): string[] {
 
 const NUMERIC_AGENT_FIELDS = new Set<AgentDraftField>([
   "success_threshold",
+  "allocation_treatment",
   "baseline_rate",
   "outcome_standard_deviation",
   "traffic_per_day",
   "metric_window_days",
+  "cuped_expected_correlation",
   "minimum_pre_periods",
 ])
 
@@ -1501,6 +1664,14 @@ function mergeAgentPatch(input: StudyDesignInput, patch: AgentDraft): StudyDesig
 
 function formatEffect(value: number, metricType: StudyDesignInput["metric_type"]): string {
   return metricType === "binary" ? `${(value * 100).toFixed(2)} pp` : value.toLocaleString(undefined, { maximumFractionDigits: 3 })
+}
+
+function formatMinimumEffect(
+  value: number,
+  metricType: StudyDesignInput["metric_type"],
+  direction: StudyDesignInput["primary_direction"],
+): string {
+  return `${direction === "decrease" ? "↓" : "↑"} ${formatEffect(value, metricType)}`
 }
 
 function numberValue(value: unknown): number | null {

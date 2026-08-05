@@ -14,11 +14,9 @@ import {
   Moon,
   Settings2,
   Sun,
-  Workflow,
   X,
 } from "lucide-react"
 
-import { BackendStatusPill } from "@/components/backend-readiness"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -35,13 +33,9 @@ function isCurrent(pathname: string, href: string) {
 
 function Brand({ onClick }: { onClick?: () => void }) {
   return (
-    <Link href="/" onClick={onClick} className="group flex items-center gap-3 rounded-xl" aria-label="Causal Decision home">
-      <span className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-[0.65rem] bg-slate-900 text-slate-200 shadow-[0_8px_22px_-14px_rgba(15,23,42,0.65)] dark:bg-slate-200 dark:text-slate-950">
-        <Workflow className="h-[18px] w-[18px]" strokeWidth={2.1} />
-        <span className="absolute inset-x-1 bottom-0 h-px bg-slate-300/70 dark:bg-slate-950/40" />
-      </span>
+    <Link href="/" onClick={onClick} className="group flex items-center rounded-xl" aria-label="Causal Agent home">
       <span className="leading-none">
-        <span className="block text-[13px] font-extrabold tracking-[-0.03em]">Causal Decision</span>
+        <span className="block text-[13px] font-extrabold tracking-[-0.03em]">Causal Agent</span>
         <span className="mt-1 block font-mono text-[8px] font-semibold uppercase tracking-[0.2em] text-slate-700/60 dark:text-slate-200/60">Evidence OS</span>
       </span>
     </Link>
@@ -111,18 +105,17 @@ export function Sidebar() {
   if (pathname === "/studies/new") return null
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-950/10 bg-[#f7f7f5]/90 backdrop-blur-xl dark:border-white/10 dark:bg-[#17191d]/90">
-      <div className="page-shell flex h-[68px] items-center justify-between gap-4">
-        <Brand onClick={() => setOpen(false)} />
-
-        <div className="hidden items-center gap-1 rounded-full border border-slate-950/10 bg-white/55 p-1 shadow-sm shadow-slate-950/[0.03] md:flex dark:border-white/10 dark:bg-white/[0.04]">
+    <header className="pointer-events-none sticky top-0 z-50">
+      <div className="page-shell flex h-[76px] items-start justify-center pt-3">
+        <div className="pointer-events-auto hidden items-center gap-1 rounded-[1.15rem] border border-slate-950/10 bg-background/82 p-1.5 shadow-[0_14px_42px_-24px_rgba(15,23,42,0.45)] backdrop-blur-xl md:flex dark:border-white/10 dark:bg-background/78">
+          <div className="px-3">
+            <Brand onClick={() => setOpen(false)} />
+          </div>
+          <span className="mx-1 h-5 w-px bg-slate-950/10 dark:bg-white/10" aria-hidden="true" />
           <Navigation pathname={pathname} />
-        </div>
-
-        <div className="hidden items-center gap-2 sm:flex">
-          <BackendStatusPill className="hidden xl:inline-flex" />
+          <span className="mx-1 h-5 w-px bg-slate-950/10 dark:bg-white/10" aria-hidden="true" />
           <ThemeToggle />
-          <Button asChild size="sm" className="h-9 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-950 dark:hover:bg-white">
+          <Button asChild size="sm" className="h-9 rounded-xl bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-950 dark:hover:bg-white">
             <Link href="/studies/new">
               <FilePlus2 className="h-4 w-4" />
               New study
@@ -130,25 +123,37 @@ export function Sidebar() {
           </Button>
         </div>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => setOpen((value) => !value)}
-          aria-label={open ? "Close navigation" : "Open navigation"}
-          aria-expanded={open}
-          aria-controls="mobile-navigation"
-          className="rounded-full sm:hidden"
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
+        <div className="pointer-events-auto flex w-full items-center justify-between gap-2 rounded-[1.15rem] border border-slate-950/10 bg-background/86 p-1.5 pl-3 shadow-[0_14px_42px_-24px_rgba(15,23,42,0.45)] backdrop-blur-xl md:hidden dark:border-white/10 dark:bg-background/82">
+          <Brand onClick={() => setOpen(false)} />
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Button asChild size="sm" className="h-9 rounded-xl bg-slate-900 px-3 text-white hover:bg-slate-800 dark:bg-slate-200 dark:text-slate-950 dark:hover:bg-white">
+              <Link href="/studies/new" onClick={() => setOpen(false)}>
+                <FilePlus2 className="h-4 w-4" />
+                <span className="hidden min-[390px]:inline">New study</span>
+              </Link>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setOpen((value) => !value)}
+              aria-label={open ? "Close navigation" : "Open navigation"}
+              aria-expanded={open}
+              aria-controls="mobile-navigation"
+              className="rounded-full"
+            >
+              {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+          </div>
+        </div>
       </div>
 
       {open && (
-        <div className="fixed inset-x-0 top-[68px] z-50 min-h-[calc(100vh-68px)] bg-slate-950/25 p-3 backdrop-blur-sm sm:hidden" onClick={() => setOpen(false)}>
+        <div className="pointer-events-auto fixed inset-x-0 top-[76px] z-50 min-h-[calc(100vh-76px)] bg-slate-950/25 p-3 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)}>
           <div
             id="mobile-navigation"
-            className="surface-card mx-auto max-w-md bg-[#fbfaf4] p-3 shadow-2xl dark:bg-[#172a21]"
+            className="surface-card mx-auto max-w-md bg-popover p-3 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <Navigation pathname={pathname} onNavigate={() => setOpen(false)} />
@@ -159,10 +164,6 @@ export function Sidebar() {
                 <ArrowUpRight className="h-4 w-4" />
               </Link>
             </Button>
-            <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-950/[0.045] px-3 py-2.5 dark:bg-white/[0.05]">
-              <BackendStatusPill />
-              <ThemeToggle />
-            </div>
             <Link href="/studies?demo=rct" onClick={() => setOpen(false)} className="mt-1 flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]">
               <span className="flex items-center gap-2"><BookOpenCheck className="h-4 w-4" /> Verified RCT demo</span>
               <ArrowUpRight className="h-3.5 w-3.5" />

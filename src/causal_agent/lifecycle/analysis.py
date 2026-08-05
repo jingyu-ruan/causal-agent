@@ -12,12 +12,15 @@ from scipy import stats
 
 from .schemas import (
     AnalysisOptions,
+    CleaningPlanExecution,
     ColumnMapping,
+    ConsistencyTest,
     DatasetSnapshot,
     DecisionOutcome,
     DecisionStatus,
     Diagnostic,
     DiagnosticStatus,
+    DimensionAnalysis,
     EventStudyPoint,
     MetricDirection,
     MetricEstimate,
@@ -26,6 +29,7 @@ from .schemas import (
     StudyAnalysisResult,
     StudyDesignArtifact,
     StudyDesignType,
+    SubgroupEstimate,
     TimeValue,
     TraceEvent,
     TransformationLogEntry,
@@ -140,6 +144,123 @@ def _required_actual_columns(
         else:
             required.append(mapping.covariate_cols[covariate])
     return list(dict.fromkeys(required)), mapping_errors
+
+
+def _mapped_columns(artifact: StudyDesignArtifact, mapping: ColumnMapping) -> set[str]:
+    required, _ = _required_actual_columns(artifact, mapping)
+    return {
+        *required,
+        *mapping.covariate_cols.values(),
+        *mapping.dimension_cols,
+    }
+
+
+def _metric_columns(artifact: StudyDesignArtifact, mapping: ColumnMapping) -> tuple[str, ...]:
+    metrics = (artifact.contract.primary_metric, *artifact.contract.guardrails)
+    return tuple(mapping.metric_cols[metric.name] for metric in metrics if metric.name in mapping.metric_cols)
+
+
+def _apply_cleaning_plan(
+    df: pd.DataFrame,
+    artifact: StudyDesignArtifact,
+    mapping: ColumnMapping,
+    plan: CleaningPlanExecution | None,
+    existing: Sequence[TransformationLogEntry],
+) -> tuple[pd.DataFrame, list[TransformationLogEntry]]:
+    """Execute only confirmed, allow-listed transformations on a copy of the upload."""
+
+    working = df.copy(deep=True)
+    transformations = list(existing)
+    if transformations and transformations[-1].rows_after != len(working):
+        return working, transformations
+    if plan is None:
+        return working, transformations
+
+    mapped = _mapped_columns(artifact, mapping)
+    required, mapping_errors = _required_actual_columns(artifact, mapping)
+    if mapping_errors:
+        return working, transformations
+    metric_columns = _metric_columns(artifact, mapping)
+
+    for request in plan.operations:
+        requested_columns = tuple(dict.fromkeys(request.columns))
+        if any(column not in working.columns for column in requested_columns):
+            raise ValueError("cleaning plan references a column that is not in the upload")
+        if any(column not in mapped for column in requested_columns):
+            raise ValueError("cleaning plan may only transform mapped analysis columns")
+
+        rows_before = len(working)
+        affected_rows = 0
+        columns = requested_columns
+
+        if request.operation == "trim_string_values":
+            columns = columns or tuple(
+                column
+                for column in (mapping.unit_col, mapping.treatment_col, *mapping.dimension_cols)
+                if column in working.columns
+            )
+            for column in columns:
+                original = working[column]
+                trimmed = original.map(lambda value: value.strip() if isinstance(value, str) else value)
+                affected_rows += int((original.fillna("<NA>") != trimmed.fillna("<NA>")).sum())
+                working[column] = trimmed
+        elif request.operation == "drop_exact_duplicates":
+            duplicated = working.duplicated(keep="first")
+            affected_rows = int(duplicated.sum())
+            working = working.loc[~duplicated].copy()
+            columns = ()
+        elif request.operation == "drop_missing_required":
+            columns = columns or tuple(required)
+            if any(column not in required for column in columns):
+                raise ValueError("drop_missing_required may only use required analysis columns")
+            missing = working.loc[:, list(columns)].isna().any(axis=1)
+            affected_rows = int(missing.sum())
+            working = working.loc[~missing].copy()
+        elif request.operation == "drop_invalid_metric_values":
+            columns = columns or metric_columns
+            if any(column not in metric_columns for column in columns):
+                raise ValueError("drop_invalid_metric_values may only use mapped metrics")
+            invalid = pd.Series(False, index=working.index)
+            metric_by_column = {
+                mapping.metric_cols[metric.name]: metric
+                for metric in (artifact.contract.primary_metric, *artifact.contract.guardrails)
+                if metric.name in mapping.metric_cols
+            }
+            for column in columns:
+                converted = pd.to_numeric(working[column], errors="coerce")
+                column_invalid = converted.isna() | ~np.isfinite(converted.to_numpy(dtype=float))
+                metric = metric_by_column[column]
+                if metric.kind == MetricKind.BINARY:
+                    column_invalid |= ~converted.isin([0.0, 1.0])
+                invalid |= column_invalid
+            affected_rows = int(invalid.sum())
+            working = working.loc[~invalid].copy()
+        elif request.operation == "fill_missing_dimensions":
+            columns = columns or mapping.dimension_cols
+            if any(column not in mapping.dimension_cols for column in columns):
+                raise ValueError("fill_missing_dimensions may only use selected dimensions")
+            for column in columns:
+                missing = working[column].isna()
+                affected_rows += int(missing.sum())
+                working.loc[missing, column] = "(missing)"
+
+        transformations.append(
+            TransformationLogEntry(
+                sequence=len(transformations) + 1,
+                operation=request.operation,
+                columns=columns,
+                rows_before=rows_before,
+                rows_after=len(working),
+                persisted=True,
+                details={
+                    "affected_rows": affected_rows,
+                    "raw_upload_unchanged": True,
+                    "agent_proposed": True,
+                    "user_confirmed": True,
+                },
+            )
+        )
+    return working.reset_index(drop=True), transformations
 
 
 def _base_validations(
@@ -1005,8 +1126,194 @@ def _make_decision(
     )
 
 
+def _holm_adjust(p_values: Sequence[float]) -> list[float]:
+    count = len(p_values)
+    adjusted = [1.0] * count
+    running_max = 0.0
+    for rank, index in enumerate(sorted(range(count), key=lambda item: p_values[item])):
+        candidate = min(1.0, (count - rank) * p_values[index])
+        running_max = max(running_max, candidate)
+        adjusted[index] = running_max
+    return adjusted
+
+
+def _subgroup_direction(metric: MetricSpec, effect: float) -> str:
+    if math.isclose(effect, 0.0, abs_tol=1e-12):
+        return "neutral"
+    beneficial = effect > 0.0 if metric.direction == MetricDirection.HIGHER_IS_BETTER else effect < 0.0
+    return "favorable" if beneficial else "harmful"
+
+
+def _subgroup_recommendation(direction: str, significant: bool) -> str:
+    if not significant:
+        return "No statistically reliable subgroup difference after multiplicity adjustment."
+    if direction == "favorable":
+        return "Favorable subgroup signal; use it for monitored rollout prioritization, not as a replacement for the overall decision."
+    if direction == "harmful":
+        return "Significant adverse subgroup signal; investigate before broad rollout."
+    return "No directional subgroup effect."
+
+
+def _consistency_test(
+    estimates: Sequence[MetricEstimate], alpha: float
+) -> ConsistencyTest | None:
+    usable = [
+        estimate
+        for estimate in estimates
+        if estimate.standard_error > 0.0
+        and math.isfinite(estimate.standard_error)
+        and math.isfinite(estimate.effect)
+    ]
+    if len(usable) < 3:
+        return None
+    weights = np.array([1.0 / estimate.standard_error**2 for estimate in usable])
+    effects = np.array([estimate.effect for estimate in usable])
+    pooled = float(np.sum(weights * effects) / np.sum(weights))
+    statistic = float(np.sum(weights * (effects - pooled) ** 2))
+    degrees_freedom = len(usable) - 1
+    p_value = float(stats.chi2.sf(statistic, degrees_freedom))
+    consistent = p_value >= alpha
+    interpretation = (
+        "Cochran’s Q did not detect effect heterogeneity across the estimable, mutually exclusive subgroups. This is not proof that effects are identical."
+        if consistent
+        else "Cochran’s Q detected effect heterogeneity across the estimable, mutually exclusive subgroups. Review subgroup estimates before rollout."
+    )
+    return ConsistencyTest(
+        statistic=statistic,
+        degrees_freedom=degrees_freedom,
+        p_value=p_value,
+        alpha=alpha,
+        consistent=consistent,
+        interpretation=interpretation,
+    )
+
+
+def _dimension_analyses(
+    df: pd.DataFrame,
+    artifact: StudyDesignArtifact,
+    mapping: ColumnMapping,
+) -> tuple[DimensionAnalysis, ...]:
+    analyses: list[DimensionAnalysis] = []
+    primary_metric = artifact.contract.primary_metric
+
+    for dimension in mapping.dimension_cols:
+        if dimension not in df.columns:
+            analyses.append(
+                DimensionAnalysis(
+                    dimension=dimension,
+                    skipped_reason="The selected dimension column is not present in the analyzed dataset.",
+                )
+            )
+            continue
+        levels = sorted(pd.unique(df[dimension].dropna()), key=lambda value: str(value))
+        if len(levels) < 2:
+            analyses.append(
+                DimensionAnalysis(
+                    dimension=dimension,
+                    skipped_reason="At least two observed levels are required for a dimension analysis.",
+                )
+            )
+            continue
+        if len(levels) > 20:
+            analyses.append(
+                DimensionAnalysis(
+                    dimension=dimension,
+                    skipped_reason="The dimension has more than 20 levels and was skipped to avoid unstable, high-cardinality fishing.",
+                )
+            )
+            continue
+
+        if artifact.design.design_type == StudyDesignType.DIFFERENCE_IN_DIFFERENCES:
+            per_unit_levels = df.groupby(mapping.unit_col)[dimension].nunique(dropna=False)
+            if bool((per_unit_levels > 1).any()):
+                analyses.append(
+                    DimensionAnalysis(
+                        dimension=dimension,
+                        skipped_reason="The dimension changes within analysis units, so mutually exclusive DiD subgroup effects are not identified.",
+                    )
+                )
+                continue
+
+        raw: list[tuple[str, MetricEstimate]] = []
+        skipped_levels: list[str] = []
+        for level in levels:
+            subset = df.loc[df[dimension] == level].copy()
+            level_label = str(_python_scalar(level))
+            try:
+                if artifact.design.design_type == StudyDesignType.RANDOMIZED_AB:
+                    labels = [allocation.label for allocation in artifact.design.allocations]
+                    groups = _normalise_group(subset[mapping.treatment_col])
+                    if any(int((groups == label).sum()) < 2 for label in labels):
+                        skipped_levels.append(level_label)
+                        continue
+                    estimate = _estimate_rct_metric(
+                        subset,
+                        artifact,
+                        mapping,
+                        primary_metric,
+                        apply_cuped=False,
+                    )
+                else:
+                    diagnostics, treatment, _, _ = _did_validations(subset, artifact, mapping)
+                    fatal_codes = {
+                        "unit_time_grain",
+                        "stable_treatment_assignment",
+                        "panel_time_support",
+                        "time_group_overlap",
+                        "identification_rank",
+                        "group_unit_count",
+                    }
+                    if any(
+                        item.status == DiagnosticStatus.FAIL and item.code in fatal_codes
+                        for item in diagnostics
+                    ):
+                        skipped_levels.append(level_label)
+                        continue
+                    estimate = _estimate_did_metric(
+                        subset, artifact, mapping, treatment, primary_metric
+                    )
+            except (KeyError, TypeError, ValueError, np.linalg.LinAlgError):
+                skipped_levels.append(level_label)
+                continue
+            raw.append((level_label, estimate))
+
+        adjusted = _holm_adjust([estimate.p_value for _, estimate in raw])
+        subgroups = tuple(
+            SubgroupEstimate(
+                dimension=dimension,
+                level=level,
+                estimate=estimate,
+                adjusted_p_value=adjusted_p,
+                significant=adjusted_p < artifact.design.alpha,
+                direction=(direction := _subgroup_direction(primary_metric, estimate.effect)),
+                recommendation=_subgroup_recommendation(
+                    direction, adjusted_p < artifact.design.alpha
+                ),
+            )
+            for (level, estimate), adjusted_p in zip(raw, adjusted, strict=True)
+        )
+        consistency = _consistency_test([estimate for _, estimate in raw], artifact.design.alpha)
+        reasons: list[str] = []
+        if skipped_levels:
+            reasons.append("Unestimable levels: " + ", ".join(skipped_levels))
+        if consistency is None:
+            reasons.append("Cochran’s Q requires at least three subgroup estimates with non-zero standard errors.")
+        analyses.append(
+            DimensionAnalysis(
+                dimension=dimension,
+                consistency=consistency,
+                subgroups=subgroups,
+                skipped_reason=" ".join(reasons) or None,
+            )
+        )
+    return tuple(analyses)
+
+
 def _trace(
-    design_type: StudyDesignType, diagnostics: Sequence[Diagnostic]
+    design_type: StudyDesignType,
+    diagnostics: Sequence[Diagnostic],
+    transformations: Sequence[TransformationLogEntry],
+    dimensions: Sequence[DimensionAnalysis],
 ) -> tuple[TraceEvent, ...]:
     failed = [item.code for item in diagnostics if item.status == DiagnosticStatus.FAIL]
     estimator = (
@@ -1014,33 +1321,62 @@ def _trace(
         if design_type == StudyDesignType.RANDOMIZED_AB
         else "two_way_fixed_effects_clustered_estimator"
     )
-    return (
+    cleaning_operations = [
+        item for item in transformations if item.details.get("user_confirmed") is True
+    ]
+    events: list[TraceEvent] = []
+    if cleaning_operations:
+        events.append(
+            TraceEvent(
+                sequence=len(events) + 1,
+                stage="data",
+                action="execute_confirmed_cleaning_plan",
+                message="Executed the user-confirmed, allow-listed cleaning plan on a working copy and recorded every operation.",
+                details={"operations": [item.operation for item in cleaning_operations]},
+            )
+        )
+    events.append(
         TraceEvent(
-            sequence=1,
+            sequence=len(events) + 1,
             stage="data",
             action="snapshot_dataset",
-            message="Hashed the input dataset and preserved the supplied transformation lineage.",
-        ),
+            message="Hashed the analyzed working dataset and preserved the complete transformation lineage.",
+        )
+    )
+    events.extend([
         TraceEvent(
-            sequence=2,
+            sequence=len(events) + 1,
             stage="diagnostics",
             action="run_frozen_evidence_gates",
             message="Ran deterministic data-quality and identification diagnostics.",
             details={"failed": failed},
         ),
         TraceEvent(
-            sequence=3,
+            sequence=len(events) + 2,
             stage="estimation",
             action=estimator,
             message="Executed the estimator declared by the frozen design.",
-        ),
+        )]
+    )
+    if dimensions:
+        events.append(
+            TraceEvent(
+                sequence=len(events) + 1,
+                stage="estimation",
+                action="subgroup_consistency_analysis",
+                message="Estimated exploratory subgroup effects, applied Holm multiplicity adjustment, and used inverse-variance Cochran’s Q where at least three subgroup estimates were available.",
+                details={"dimensions": [item.dimension for item in dimensions]},
+            )
+        )
+    events.append(
         TraceEvent(
-            sequence=4,
+            sequence=len(events) + 1,
             stage="decision",
             action="apply_frozen_thresholds",
             message="Applied the pre-committed primary and guardrail decision rules.",
-        ),
+        )
     )
+    return tuple(events)
 
 
 def analyze_study(
@@ -1049,7 +1385,7 @@ def analyze_study(
     mapping: ColumnMapping,
     options: AnalysisOptions | None = None,
 ) -> StudyAnalysisResult:
-    """Run the frozen study design against an analysis-ready dataframe."""
+    """Run the frozen study design after executing any confirmed cleaning plan."""
 
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame")
@@ -1057,8 +1393,13 @@ def analyze_study(
     # at the trust boundary so an in-memory hash/contract mismatch cannot reach an estimator.
     artifact = StudyDesignArtifact.model_validate_json(artifact.model_dump_json())
     options = options or AnalysisOptions()
-    working = df.copy(deep=True)
-    transformations = list(options.transformation_log)
+    working, transformations = _apply_cleaning_plan(
+        df,
+        artifact,
+        mapping,
+        options.cleaning_plan,
+        options.transformation_log,
+    )
     snapshot = DatasetSnapshot(
         sha256=_dataset_hash(working),
         row_count=len(working),
@@ -1082,6 +1423,7 @@ def analyze_study(
     )
     structurally_valid = structurally_valid and lineage_valid
     event_study: tuple[EventStudyPoint, ...] = ()
+    dimension_analyses: tuple[DimensionAnalysis, ...] = ()
     primary: MetricEstimate | None = None
     guardrails: tuple[MetricEstimate, ...] = ()
 
@@ -1151,6 +1493,9 @@ def analyze_study(
                 for metric in artifact.contract.guardrails
             )
 
+    if primary is not None and mapping.dimension_cols:
+        dimension_analyses = _dimension_analyses(working, artifact, mapping)
+
     decision = _make_decision(artifact, diagnostics, primary, guardrails)
     return StudyAnalysisResult(
         study_id=artifact.study_id,
@@ -1160,6 +1505,12 @@ def analyze_study(
         primary_estimate=primary,
         guardrail_estimates=guardrails,
         event_study=event_study,
+        dimension_analyses=dimension_analyses,
         decision=decision,
-        trace=_trace(artifact.design.design_type, diagnostics),
+        trace=_trace(
+            artifact.design.design_type,
+            diagnostics,
+            transformations,
+            dimension_analyses,
+        ),
     )

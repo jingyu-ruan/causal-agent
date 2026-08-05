@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Generator
 
@@ -121,6 +122,117 @@ def test_uploaded_analysis_is_persisted_with_provenance(client: TestClient) -> N
     assert "**HOLD**" in memo.text
     assert "Dataset hash" in memo.text
     assert "no numerical value was authored by an LLM" in memo.text
+
+
+def test_profile_proposes_confirmable_cleaning_and_dimensions_without_raw_samples(
+    client: TestClient,
+) -> None:
+    created = client.post("/api/studies/design", json=_rct_payload()).json()
+    frame = pd.DataFrame(
+        {
+            "user_id": [f"private_user_{index}" for index in range(180)],
+            "variant": ["control"] * 90 + ["treatment"] * 90,
+            "activation": [0, 1] * 90,
+            "region": ["east", "north", "west"] * 60,
+        }
+    )
+    frame.loc[0, "activation"] = np.nan
+    frame = pd.concat([frame, frame.iloc[[1]]], ignore_index=True)
+    content = frame.to_csv(index=False).encode()
+    mapping = {
+        "unit_col": "user_id",
+        "treatment_col": "variant",
+        "metric_cols": {"activation": "activation"},
+        "covariate_cols": {},
+    }
+
+    response = client.post(
+        f"/api/studies/{created['id']}/profile",
+        files={"file": ("analysis.csv", content, "text/csv")},
+        data={"mapping_json": json.dumps(mapping)},
+    )
+
+    assert response.status_code == 200, response.text
+    profile = response.json()
+    assert profile["source_sha256"] == hashlib.sha256(content).hexdigest()
+    assert profile["suggested_dimensions"] == ["region"]
+    assert {item["operation"] for item in profile["operations"]} == {
+        "drop_exact_duplicates",
+        "drop_missing_required",
+    }
+    assert profile["blocking_issues"] == []
+    assert "private_user_" not in response.text
+
+
+def test_analysis_requires_profile_hash_and_executes_confirmed_plan(client: TestClient) -> None:
+    created = client.post("/api/studies/design", json=_rct_payload()).json()
+    frame = pd.DataFrame(
+        {
+            "user_id": [f"user_{index}" for index in range(180)],
+            "variant": ["control"] * 90 + ["treatment"] * 90,
+            "activation": [0, 1] * 45 + [0, 1] * 45,
+            "region": ["east", "north", "west"] * 60,
+        }
+    )
+    frame.loc[0, "activation"] = np.nan
+    frame = pd.concat([frame, frame.iloc[[1]]], ignore_index=True)
+    content = frame.to_csv(index=False).encode()
+    mapping = {
+        "unit_col": "user_id",
+        "treatment_col": "variant",
+        "metric_cols": {"activation": "activation"},
+        "covariate_cols": {},
+        "dimension_cols": ["region"],
+    }
+    operations = [
+        {"operation": "drop_exact_duplicates", "columns": []},
+        {
+            "operation": "drop_missing_required",
+            "columns": ["user_id", "variant", "activation"],
+        },
+    ]
+
+    mismatch = client.post(
+        f"/api/studies/{created['id']}/analyze",
+        files={"file": ("analysis.csv", content, "text/csv")},
+        data={
+            "mapping_json": json.dumps(mapping),
+            "options_json": json.dumps(
+                {
+                    "transformation_log": [],
+                    "cleaning_plan": {"source_sha256": "0" * 64, "operations": operations},
+                }
+            ),
+        },
+    )
+    assert mismatch.status_code == 409
+
+    response = client.post(
+        f"/api/studies/{created['id']}/analyze",
+        files={"file": ("analysis.csv", content, "text/csv")},
+        data={
+            "mapping_json": json.dumps(mapping),
+            "options_json": json.dumps(
+                {
+                    "transformation_log": [],
+                    "cleaning_plan": {
+                        "source_sha256": hashlib.sha256(content).hexdigest(),
+                        "operations": operations,
+                    },
+                }
+            ),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["analysis"]["dataset"]["row_count"] == 179
+    assert result["runs"][0]["row_count"] == 179
+    assert [item["operation"] for item in result["analysis"]["dataset"]["transformations"]] == [
+        "drop_exact_duplicates",
+        "drop_missing_required",
+    ]
+    assert result["analysis"]["dimension_analyses"][0]["dimension"] == "region"
 
 
 def test_did_rejects_rct_only_fields_instead_of_ignoring_them(client: TestClient) -> None:

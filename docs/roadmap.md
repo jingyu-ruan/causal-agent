@@ -15,15 +15,18 @@ estimators.
 - Render-aware readiness UX, scoped DeepSeek credential handling, Docker, and CI gates.
 - Model-driven intake with a validated interactive-form protocol and independent
   server-side completeness checks.
+- Metadata-only upload profiling, user-confirmed allow-listed cleaning, immutable
+  transformation lineage, and raw-upload hash binding.
+- Interactive dimension drilldowns with Holm-adjusted subgroup tests and
+  inverse-variance Cochran's Q heterogeneity checks where supported.
+- A flat, table-first interactive HTML evidence report.
 
-## P1 — make real datasets safer
+## P1 — deepen missingness and attrition policy
 
-1. Add a data-profile step before analysis: inferred types, missingness,
-   duplicates, treatment support, grain, ranges, and a column-level preview.
-2. Let the agent propose a transformation plan, but require explicit user
-   approval and persist every operation in `transformation_log`.
-3. Add attrition and missing-outcome policies to the frozen design so the tool
+1. Add attrition and missing-outcome policies to the frozen design so the tool
    can distinguish a precommitted rule from post-outcome cleaning.
+2. Add treatment-arm missingness comparisons and threshold-based refusal rules.
+3. Add a before/after aggregate preview for each proposed transformation.
 
 Success criterion: a user can explain exactly why every analyzed row and column
 is present, changed, or excluded.

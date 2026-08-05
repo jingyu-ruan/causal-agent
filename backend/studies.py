@@ -25,6 +25,7 @@ from causal_agent.lifecycle import (
     create_study_design,
 )
 
+from .data_preparation import DatasetPreparationProfile, profile_dataset
 from .database import get_session
 from .models import StudyRecord, StudyRunRecord, utc_now
 from .uploads import parse_analysis_frame, read_upload_bytes
@@ -341,6 +342,21 @@ def _parse_json_model(model: type[BaseModel], raw: str, label: str) -> BaseModel
         raise HTTPException(status_code=422, detail=_validation_detail(exc)) from exc
 
 
+@router.post("/{study_id}/profile", response_model=DatasetPreparationProfile)
+async def profile_uploaded_study(
+    study_id: str,
+    file: UploadFile = File(...),
+    mapping_json: str = Form(...),
+    session: Session = Depends(get_session),
+) -> DatasetPreparationProfile:
+    record = _get_record(session, study_id)
+    mapping = _parse_json_model(ColumnMapping, mapping_json, "mapping_json")
+    content = await read_upload_bytes(file)
+    frame = parse_analysis_frame(file.filename, content)
+    artifact = StudyDesignArtifact.model_validate_json(record.artifact_json)
+    return profile_dataset(frame, content, artifact, mapping)
+
+
 @router.post("/{study_id}/analyze")
 async def analyze_uploaded_study(
     study_id: str,
@@ -356,6 +372,12 @@ async def analyze_uploaded_study(
     content = await read_upload_bytes(file)
     frame = parse_analysis_frame(file.filename, content)
     artifact = StudyDesignArtifact.model_validate_json(record.artifact_json)
+    source_sha256 = hashlib.sha256(content).hexdigest()
+    if options.cleaning_plan and options.cleaning_plan.source_sha256 != source_sha256:
+        raise HTTPException(
+            status_code=409,
+            detail="The uploaded file changed after profiling; review a new cleaning plan before analysis",
+        )
     try:
         result = analyze_study(frame, artifact, mapping, options)
     except (TypeError, ValueError, KeyError) as exc:
@@ -368,8 +390,8 @@ async def analyze_uploaded_study(
         id=f"run_{uuid.uuid4().hex}",
         study_id=study_id,
         filename=Path(file.filename or "upload").name,
-        dataset_sha256=hashlib.sha256(content).hexdigest(),
-        row_count=len(frame),
+        dataset_sha256=source_sha256,
+        row_count=result.dataset.row_count,
         result_json=result.model_dump_json(),
     )
     record.latest_result_json = result.model_dump_json()

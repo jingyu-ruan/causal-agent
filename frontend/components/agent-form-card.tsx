@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { ArrowRight, Check, ListChecks } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -71,6 +71,61 @@ function hasValue(field: AgentField, value: FormValue | undefined) {
   return Boolean(value?.trim())
 }
 
+function usableSuggestion(field: AgentField): FormValue | undefined {
+  const suggestion = field.suggested_value?.trim()
+  if (!suggestion || field.control === "checkbox_group") return undefined
+  if (field.control === "radio" || field.control === "select") {
+    return field.options.some((option) => option.value === suggestion) ? suggestion : undefined
+  }
+  if (field.control === "number") {
+    const number = Number(suggestion)
+    if (!Number.isFinite(number)) return undefined
+    if (field.min !== null && field.min !== undefined && number < field.min) return undefined
+    if (field.max !== null && field.max !== undefined && number > field.max) return undefined
+  }
+  if (field.control === "date" && !/^\d{4}-\d{2}-\d{2}$/u.test(suggestion)) return undefined
+  return suggestion
+}
+
+function effectiveValue(field: AgentField, value: FormValue | undefined): FormValue {
+  if (Array.isArray(value)) return value.length > 0 ? value : usableSuggestion(field) ?? []
+  return value?.trim() ? value : usableSuggestion(field) ?? ""
+}
+
+function useStreamingSuggestions(block: AgentFormBlock) {
+  const signature = block.fields
+    .map((field) => `${field.id}:${field.suggested_value ?? ""}`)
+    .join("|")
+  const [streamed, setStreamed] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    const targets = Object.fromEntries(
+      block.fields
+        .filter((field) => usableSuggestion(field) !== undefined)
+        .map((field) => [field.id, field.suggested_value?.trim() ?? ""]),
+    )
+    const maxLength = Math.max(0, ...Object.values(targets).map((value) => value.length))
+    if (maxLength === 0) {
+      const resetTimer = window.setTimeout(() => setStreamed({}), 0)
+      return () => window.clearTimeout(resetTimer)
+    }
+
+    let position = 0
+    const timer = window.setInterval(() => {
+      position = Math.min(maxLength, position + 1)
+      setStreamed(Object.fromEntries(
+        Object.entries(targets).map(([field, value]) => [field, value.slice(0, position)]),
+      ))
+      if (position >= maxLength) window.clearInterval(timer)
+    }, 16)
+    return () => window.clearInterval(timer)
+    // The signature captures suggestion changes without restarting on ordinary input renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [block.id, signature])
+
+  return streamed
+}
+
 function visibleValue(field: AgentField, value: FormValue | undefined) {
   const rawValues = Array.isArray(value) ? value : [value ?? ""]
   return rawValues
@@ -96,7 +151,8 @@ export function AgentFormCard({
   const idPrefix = useId()
   const visibleBlock = humanFacingBlock(block)
   const [values, setValues] = useState<Record<string, FormValue>>(() => initialValues(block))
-  const complete = visibleBlock.fields.every((field) => hasValue(field, values[field.id]))
+  const streamedSuggestions = useStreamingSuggestions(visibleBlock)
+  const complete = visibleBlock.fields.every((field) => hasValue(field, effectiveValue(field, values[field.id])))
   const disabled = !active || busy
 
   const update = (field: AgentField, value: FormValue) => {
@@ -106,10 +162,18 @@ export function AgentFormCard({
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!complete || disabled) return
-    const lines = visibleBlock.fields.map((field) => `${field.label}: ${visibleValue(field, values[field.id])}`)
+    const effectiveValues = Object.fromEntries(
+      visibleBlock.fields.map((field) => [field.id, effectiveValue(field, values[field.id])]),
+    )
+    const acceptedSuggestion = visibleBlock.fields.some((field) => {
+      const value = values[field.id]
+      const blank = Array.isArray(value) ? value.length === 0 : !value?.trim()
+      return blank && usableSuggestion(field) !== undefined
+    })
+    const lines = visibleBlock.fields.map((field) => `${field.label}: ${visibleValue(field, effectiveValues[field.id])}`)
     onSubmit({
-      summary: `Form response\n${lines.join("\n")}`,
-      values: Object.fromEntries(visibleBlock.fields.map((field) => [field.id, values[field.id]])),
+      summary: `${acceptedSuggestion ? "Form response (accepted Agent suggestions where left blank)" : "Form response"}\n${lines.join("\n")}`,
+      values: effectiveValues,
     })
   }
 
@@ -140,6 +204,7 @@ export function AgentFormCard({
         {visibleBlock.fields.map((field) => {
           const fieldId = `${idPrefix}-${block.id}-${field.id}`
           const value = values[field.id]
+          const streamedSuggestion = streamedSuggestions[field.id] ?? ""
           return (
             <fieldset key={field.id} disabled={disabled} className="relative space-y-2.5">
               <Label htmlFor={fieldId} className="leading-5">
@@ -151,9 +216,9 @@ export function AgentFormCard({
                   id={fieldId}
                   value={typeof value === "string" ? value : ""}
                   onChange={(event) => update(field, event.target.value)}
-                  placeholder={field.placeholder ?? undefined}
+                  placeholder={streamedSuggestion || field.placeholder || undefined}
                   rows={3}
-                  className="min-h-24"
+                  className="min-h-24 placeholder:text-slate-400/90 dark:placeholder:text-slate-500"
                 />
               )}
 
@@ -163,10 +228,11 @@ export function AgentFormCard({
                   type={field.control}
                   value={typeof value === "string" ? value : ""}
                   onChange={(event) => update(field, event.target.value)}
-                  placeholder={field.placeholder ?? undefined}
+                  placeholder={streamedSuggestion || field.placeholder || undefined}
                   min={field.min ?? undefined}
                   max={field.max ?? undefined}
                   step={field.step ?? undefined}
+                  className="placeholder:text-slate-400/90 dark:placeholder:text-slate-500"
                 />
               )}
 
@@ -236,8 +302,7 @@ export function AgentFormCard({
         })}
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-border bg-muted/25 px-4 py-3 sm:px-5">
-        <span className="text-[10px] text-muted-foreground">文本框可换行 · ⌘/Ctrl + Enter 继续</span>
+      <div className="flex items-center justify-end border-t border-border bg-muted/25 px-4 py-3 sm:px-5">
         <Button type="submit" size="sm" disabled={!complete || disabled} className="rounded-lg">
           {!active ? <><Check className="h-4 w-4" /> Answered</> : <>{visibleBlock.submit_label}<ArrowRight className="h-4 w-4" /></>}
         </Button>

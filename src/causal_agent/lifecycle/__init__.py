@@ -5,7 +5,10 @@ from .design import create_study_design
 from .schemas import (
     AnalysisOptions,
     CausalContract,
+    CleaningOperationRequest,
+    CleaningPlanExecution,
     ColumnMapping,
+    ConsistencyTest,
     DataContract,
     DatasetSnapshot,
     DecisionOutcome,
@@ -13,6 +16,7 @@ from .schemas import (
     DesignSpec,
     Diagnostic,
     DiagnosticStatus,
+    DimensionAnalysis,
     Estimand,
     EventStudyPoint,
     MetricDirection,
@@ -23,6 +27,7 @@ from .schemas import (
     StudyDesignArtifact,
     StudyDesignRequest,
     StudyDesignType,
+    SubgroupEstimate,
     TraceEvent,
     TransformationLogEntry,
 )
@@ -30,7 +35,10 @@ from .schemas import (
 __all__ = [
     "AnalysisOptions",
     "CausalContract",
+    "CleaningOperationRequest",
+    "CleaningPlanExecution",
     "ColumnMapping",
+    "ConsistencyTest",
     "DataContract",
     "DatasetSnapshot",
     "DecisionOutcome",
@@ -38,6 +46,7 @@ __all__ = [
     "DesignSpec",
     "Diagnostic",
     "DiagnosticStatus",
+    "DimensionAnalysis",
     "Estimand",
     "EventStudyPoint",
     "MetricDirection",
@@ -50,6 +59,7 @@ __all__ = [
     "StudyDesignType",
     "TraceEvent",
     "TransformationLogEntry",
+    "SubgroupEstimate",
     "analyze_study",
     "create_study_design",
 ]
