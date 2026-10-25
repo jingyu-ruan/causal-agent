@@ -1,10 +1,10 @@
 import { useSyncExternalStore } from "react"
 
-export type DeepSeekModel = "deepseek-v4-pro" | "deepseek-v4-flash"
+export type AgentModel = "deepseek-v4-pro" | "deepseek-v4-flash" | "openrouter/free"
 
 export interface AgentSettings {
   apiKey: string
-  model: DeepSeekModel
+  model: AgentModel
   remember: boolean
 }
 
@@ -27,7 +27,7 @@ function parseSettings(raw: string | null): AgentSettings | null {
   if (!raw) return null
   try {
     const value = JSON.parse(raw) as Partial<AgentSettings>
-    const model = value.model === "deepseek-v4-flash" ? value.model : "deepseek-v4-pro"
+    const model = value.model === "deepseek-v4-flash" || value.model === "openrouter/free" ? value.model : "deepseek-v4-pro"
     return {
       apiKey: typeof value.apiKey === "string" ? value.apiKey : "",
       model,

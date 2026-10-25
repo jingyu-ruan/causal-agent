@@ -18,10 +18,10 @@ export default function SettingsPage() {
   return (
     <div className="page-shell py-10 sm:py-14">
       <div className="mx-auto max-w-2xl">
-        <div className="mb-7">
+        <div className="page-heading !pt-0 !pb-7">
           <p className="eyebrow"><KeyRound className="h-4 w-4" /> Agent configuration</p>
-          <h1 className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">DeepSeek settings</h1>
-          <p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground">
+          <h1 className="!mt-3">Model settings</h1>
+          <p className="page-description max-w-xl">
             Configure the model that interprets study answers and creates interactive follow-up
             forms. Analysis and causal calculations remain in deterministic tools.
           </p>

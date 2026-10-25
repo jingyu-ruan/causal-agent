@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
+import Link from "@/components/page-link"
 import {
   Check,
   FolderKanban,
@@ -9,12 +9,14 @@ import {
   MessageSquare,
   Pencil,
   Plus,
+  FlaskConical,
   Settings2,
   Trash2,
   X,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { CausalMark } from "@/components/causal-mark"
 import type { ConversationSummary } from "@/lib/conversation-api"
 import { cn } from "@/lib/utils"
 
@@ -33,7 +35,7 @@ type ConversationHistorySidebarProps = {
 export function ConversationHistorySidebar(props: ConversationHistorySidebarProps) {
   return (
     <>
-      <aside className="hidden h-dvh w-[280px] shrink-0 border-r border-border/80 bg-sidebar lg:flex lg:flex-col">
+      <aside className="hidden h-dvh w-[228px] shrink-0 border-r border-border bg-card lg:flex lg:flex-col">
         <SidebarContent {...props} />
       </aside>
       {props.open && (
@@ -55,7 +57,7 @@ function SidebarContent(props: ConversationHistorySidebarProps & { onNavigate?: 
     <>
       <div className="flex h-14 items-center px-3.5">
         <Link href="/" className="min-w-0 rounded-lg px-1.5 py-1.5" onClick={props.onNavigate} aria-label="Causal Agent home">
-          <span className="truncate text-sm font-bold tracking-tight">Causal Agent</span>
+          <span className="flex items-center gap-2.5"><CausalMark className="h-6 w-6 text-primary" /><span className="truncate text-[15px] font-semibold tracking-tight">Causal Agent</span></span>
         </Link>
       </div>
 
@@ -66,7 +68,7 @@ function SidebarContent(props: ConversationHistorySidebarProps & { onNavigate?: 
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2.5 pb-3">
-        <p className="px-2 pb-2 pt-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Recent</p>
+        <p className="px-2 pb-2 pt-1 tabular-nums text-[11px] font-semibold normal-case tracking-normal text-muted-foreground">Recent</p>
         {props.loading && props.conversations.length === 0 ? (
           <p className="px-2 py-4 text-xs text-muted-foreground">Loading conversations…</p>
         ) : props.conversations.length === 0 ? (
@@ -90,6 +92,7 @@ function SidebarContent(props: ConversationHistorySidebarProps & { onNavigate?: 
       <div className="mt-auto border-t border-border/70 p-2.5">
         <nav aria-label="Workspace navigation" className="space-y-0.5">
           <WorkspaceLink href="/" label="Overview" icon={Home} onClick={props.onNavigate} />
+          <WorkspaceLink href="/studies/replay" label="Live demonstration" icon={FlaskConical} onClick={props.onNavigate} />
           <WorkspaceLink href="/studies" label="Studies" icon={FolderKanban} onClick={props.onNavigate} />
           <WorkspaceLink href="/settings" label="Settings" icon={Settings2} onClick={props.onNavigate} />
         </nav>

@@ -245,6 +245,38 @@ def test_malformed_model_form_falls_back_without_losing_confirmed_values(
     assert "没有丢失" in payload["message"]
 
 
+def test_invalid_provider_json_falls_back_without_an_unhandled_500(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def invalid_response(**_: object) -> dict[str, object]:
+        raise agent_module.InvalidAgentResponseError(
+            "DeepSeek returned an empty or invalid JSON response"
+        )
+
+    monkeypatch.setattr(agent_module, "_safe_model_call", invalid_response)
+
+    response = client.post(
+        "/api/agent/intake",
+        headers={"X-DeepSeek-API-Key": "test-key"},
+        json={
+            "draft": {
+                "mode": "prospective",
+                "business_question": "Should we launch the new homepage?",
+            },
+            "captured_fields": ["mode", "business_question"],
+            "model": "deepseek-v4-flash",
+            "locale": "zh-CN",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert "没有丢失" in payload["message"]
+    assert payload["blocks"]
+    assert payload["next_action"] == "collect"
+
+
 def test_guardrail_form_is_always_presented_as_natural_language(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

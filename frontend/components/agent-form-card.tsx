@@ -21,9 +21,31 @@ import { cn } from "@/lib/utils"
 
 type FormValue = string | string[]
 
+function normalizeCausalTerms(text: string): string {
+  return text.replaceAll("双差分", "双重差分")
+}
+
 function humanFacingBlock(block: AgentFormBlock): AgentFormBlock {
-  if (!block.fields.some((field) => field.id === "guardrails")) return block
-  const sourceCopy = [block.title, block.description, ...block.fields.flatMap((field) => [field.label, field.placeholder, field.helper_text])]
+  const normalized: AgentFormBlock = {
+    ...block,
+    title: normalizeCausalTerms(block.title),
+    description: block.description ? normalizeCausalTerms(block.description) : block.description,
+    submit_label: normalizeCausalTerms(block.submit_label),
+    fields: block.fields.map((field) => ({
+      ...field,
+      label: normalizeCausalTerms(field.label),
+      placeholder: field.placeholder ? normalizeCausalTerms(field.placeholder) : field.placeholder,
+      helper_text: field.helper_text ? normalizeCausalTerms(field.helper_text) : field.helper_text,
+      suggestion_basis: field.suggestion_basis ? normalizeCausalTerms(field.suggestion_basis) : field.suggestion_basis,
+      options: field.options.map((option) => ({
+        ...option,
+        label: normalizeCausalTerms(option.label),
+        description: option.description ? normalizeCausalTerms(option.description) : option.description,
+      })),
+    })),
+  }
+  if (!normalized.fields.some((field) => field.id === "guardrails")) return normalized
+  const sourceCopy = [normalized.title, normalized.description, ...normalized.fields.flatMap((field) => [field.label, field.placeholder, field.helper_text])]
     .filter(Boolean)
     .join(" ")
   const chinese = /[\u3400-\u9fff]/u.test(sourceCopy)
@@ -43,10 +65,10 @@ function humanFacingBlock(block: AgentFormBlock): AgentFormBlock {
         helper: "You can describe several outcomes at once. No special format is required.",
       }
   return {
-    ...block,
-    title: block.fields.length === 1 ? copy.title : block.title,
+    ...normalized,
+    title: normalized.fields.length === 1 ? copy.title : normalized.title,
     description: copy.description,
-    fields: block.fields.map((field) => field.id === "guardrails"
+    fields: normalized.fields.map((field) => field.id === "guardrails"
       ? {
           ...field,
           label: copy.label,
@@ -132,7 +154,8 @@ function visibleValue(field: AgentField, value: FormValue | undefined) {
     .filter(Boolean)
     .map((item) => {
       const label = field.options.find((option) => option.value === item)?.label
-      return label && label !== item ? `${label} [${item}]` : item
+      const visibleLabel = label ? normalizeCausalTerms(label) : label
+      return visibleLabel && visibleLabel !== item ? `${visibleLabel} [${item}]` : normalizeCausalTerms(item)
     })
     .join(", ")
 }
@@ -194,7 +217,7 @@ export function AgentFormCard({
       )}
     >
       <div className="border-b border-border bg-muted/40 px-4 py-3.5 sm:px-5">
-        <div className="flex items-center gap-2 text-xs font-bold">
+        <div className="flex items-center gap-2 text-xs font-semibold">
           <ListChecks className="h-4 w-4 text-muted-foreground" /> {visibleBlock.title}
         </div>
         {visibleBlock.description && <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground">{visibleBlock.description}</p>}

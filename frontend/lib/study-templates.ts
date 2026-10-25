@@ -1,7 +1,7 @@
 import type { StudyDesignInput } from "@/lib/studies-api"
 
 export type StudyTemplate = {
-  id: "onboarding" | "game-rollout"
+  id: "onboarding" | "game-rollout" | "regional-rollout"
   label: string
   eyebrow: string
   description: string
@@ -9,6 +9,38 @@ export type StudyTemplate = {
 }
 
 export const STUDY_TEMPLATES: StudyTemplate[] = [
+  {
+    id: "regional-rollout",
+    label: "Regional rollout study",
+    eyebrow: "Panel study / Difference-in-differences",
+    description: "Compare regional outcomes before and after a phased rollout, with pre-trend and event-study checks.",
+    design: {
+      name: "Regional rollout impact study",
+      mode: "prospective",
+      business_question: "Did the regional rollout improve the target outcome?",
+      hypothesis: "The rollout increases the target outcome in treated regions relative to comparison regions after adoption.",
+      population: "Eligible regions observed before and after adoption",
+      intervention: "New product rollout in treated regions",
+      comparison: "Comparable regions retaining the current experience",
+      primary_metric: "outcome",
+      metric_type: "continuous",
+      primary_direction: "increase",
+      success_threshold: 1,
+      guardrails: [],
+      design_type: "did",
+      randomization_unit: "region_id",
+      control_group: "control",
+      treatment_group: "treatment",
+      baseline_rate: 10,
+      outcome_standard_deviation: 0.2,
+      alpha: 0.05,
+      power: 0.8,
+      metric_window_days: 7,
+      treatment_start: "2026-09-01",
+      minimum_pre_periods: 5,
+      notes: "Synthetic panel demonstration; inferences apply to this simulated study.",
+    },
+  },
   {
     id: "onboarding",
     label: "Onboarding A/B test",

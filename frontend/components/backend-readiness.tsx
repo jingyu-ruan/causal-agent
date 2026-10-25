@@ -106,7 +106,7 @@ export function BackendStatusPill({ className }: { className?: string }) {
   }[state]
   const Icon = content.icon
   const pillClassName = cn(
-    "inline-flex items-center gap-2 rounded-full px-3 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.1em]",
+    "inline-flex items-center gap-2 rounded-full px-3 py-1.5 tabular-nums text-[11px] font-semibold normal-case tracking-normal",
     content.style,
     className,
   )

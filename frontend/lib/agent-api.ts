@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "@/lib/config"
-import type { DeepSeekModel } from "@/lib/agent-settings"
+import type { AgentModel } from "@/lib/agent-settings"
 import type { StudyDesignInput } from "@/lib/studies-api"
 
 export type AgentDraftField =
@@ -82,11 +82,11 @@ export type AgentTurnResponse = {
   blocks: AgentFormBlock[]
   next_action: "collect" | "review"
   ready_to_freeze: boolean
-  provider: "deepseek"
-  model: DeepSeekModel
+  provider: "deepseek" | "openrouter"
+  model: AgentModel
 }
 
-const AGENT_DRAFT_FIELDS: AgentDraftField[] = [
+export const AGENT_DRAFT_FIELDS: AgentDraftField[] = [
   "name",
   "mode",
   "business_question",
@@ -138,11 +138,18 @@ export async function runIntakeAgent(
     messages: AgentHistoryMessage[]
     draft: AgentDraft
     captured_fields: AgentDraftField[]
-    model: DeepSeekModel
+    model: AgentModel
     locale: string
   },
   apiKey: string,
 ): Promise<AgentTurnResponse> {
+  if (payload.model === "openrouter/free") {
+    const { runOpenRouterIntake } = await import("@/lib/openrouter-agent")
+    return runOpenRouterIntake(payload, apiKey)
+  }
+  if (apiKey.trim().startsWith("sk-or-")) {
+    throw new Error("Select OpenRouter Free before using an OpenRouter API key.")
+  }
   const headers: Record<string, string> = { "Content-Type": "application/json" }
   if (apiKey.trim()) headers["X-DeepSeek-API-Key"] = apiKey.trim()
 

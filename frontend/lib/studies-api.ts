@@ -4,6 +4,7 @@ export type StudyMode = "prospective" | "retrospective"
 export type DesignType = "rct" | "did"
 export type MetricType = "binary" | "continuous"
 export type PrimaryDirection = "increase" | "decrease"
+export type RctDemoScenario = "go" | "hold" | "insufficient_evidence"
 
 export interface GuardrailDefinition {
   name: string
@@ -81,6 +82,17 @@ export interface EffectEstimate {
   treatment_mean?: number | null
 }
 
+export interface EventStudyPoint {
+  time_value?: string | number
+  relative_period?: number
+  is_reference?: boolean
+  effect?: number
+  standard_error?: number | null
+  ci_lower?: number | null
+  ci_upper?: number | null
+  p_value?: number | null
+}
+
 export interface StudyRecord {
   id?: string
   study_id?: string
@@ -101,6 +113,7 @@ export interface StudyRecord {
   decision?: Record<string, unknown>
   decision_memo?: string | Record<string, unknown>
   trace?: AgentTraceStep[]
+  event_study?: EventStudyPoint[]
   warnings?: string[]
   [key: string]: unknown
 }
@@ -170,6 +183,11 @@ export interface ColumnMappingPayload {
   time_col?: string
   covariate_cols: Record<string, string>
   dimension_cols?: string[]
+}
+
+export interface SyntheticDatasetParameters {
+  baseline_value?: number
+  outcome_standard_deviation?: number
 }
 
 const STUDIES_API = `${API_BASE_URL}/api/studies`
@@ -278,13 +296,30 @@ export async function profileStudyDataset(
   return response.json()
 }
 
+export async function generateSyntheticDataset(
+  studyId: string,
+  parameters: SyntheticDatasetParameters = {},
+): Promise<File> {
+  const response = await fetch(`${STUDIES_API}/${encodeURIComponent(studyId)}/synthetic-data`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(parameters),
+  })
+  if (!response.ok) throw await apiError(response, "Synthetic dataset could not be generated")
+  const blob = await response.blob()
+  const contentDisposition = response.headers.get("content-disposition") ?? ""
+  const filename = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1] ?? `${studyId}-synthetic.csv`
+  return new File([blob], filename, { type: "text/csv" })
+}
+
 export async function listStudies(): Promise<StudyRecord[]> {
   const response = await fetch(STUDIES_API, { cache: "no-store" })
   if (!response.ok) throw await apiError(response, "Could not load studies")
-  const payload = await response.json()
+  const payload: unknown = await response.json()
   if (Array.isArray(payload)) return payload
-  if (Array.isArray(payload?.studies)) return payload.studies
-  if (Array.isArray(payload?.items)) return payload.items
+  const collection = payload && typeof payload === "object" ? payload as { studies?: unknown; items?: unknown } : {}
+  if (Array.isArray(collection.studies)) return collection.studies
+  if (Array.isArray(collection.items)) return collection.items
   return []
 }
 
@@ -296,9 +331,16 @@ export async function getStudy(studyId: string): Promise<StudyRecord> {
   return response.json()
 }
 
-export async function getRctDemo(): Promise<StudyRecord> {
-  const response = await fetch(`${STUDIES_API}/demo/rct`, { cache: "no-store" })
+export async function getRctDemo(scenario: RctDemoScenario = "go"): Promise<StudyRecord> {
+  const endpoint = scenario === "go" ? "/demo/rct" : `/demo/rct/${scenario}`
+  const response = await fetch(`${STUDIES_API}${endpoint}`, { cache: "no-store" })
   if (!response.ok) throw await apiError(response, "Could not load the verified demo")
+  return response.json()
+}
+
+export async function getDidDemo(): Promise<StudyRecord> {
+  const response = await fetch(`${STUDIES_API}/demo/did`, { cache: "no-store" })
+  if (!response.ok) throw await apiError(response, "Could not load the verified DiD demo")
   return response.json()
 }
 
@@ -308,7 +350,7 @@ export async function checkBackendReady(signal?: AbortSignal): Promise<boolean> 
     signal,
   })
   if (!response.ok) return false
-  const payload = await response.json().catch(() => null)
+  const payload = await response.json().catch(() => null) as { status?: string; ready?: boolean } | null
   return payload?.status === "ready" || payload?.ready === true || payload?.status === "ok"
 }
 

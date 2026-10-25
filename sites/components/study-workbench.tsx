@@ -1,0 +1,1757 @@
+"use client"
+
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react"
+import Link from "@/components/page-link"
+import { useSearchParams } from "next/navigation"
+import { useTheme } from "next-themes"
+import {
+  AlertCircle,
+  Braces,
+  Check,
+  CheckCircle2,
+  Copy,
+  Database,
+  ArrowUpRight,
+  ArrowRight,
+  FlaskConical,
+  FileCheck2,
+  FileSpreadsheet,
+  KeyRound,
+  MessageSquareText,
+  Moon,
+  PanelLeft,
+  Paperclip,
+  Pencil,
+  RefreshCw,
+  Send,
+  Settings2,
+  SquareTerminal,
+  Sun,
+  UploadCloud,
+  Wrench,
+  X,
+} from "lucide-react"
+
+import { AgentFormCard } from "@/components/agent-form-card"
+import { AgentSettingsDialog } from "@/components/agent-settings"
+import { useBackendReadiness } from "@/components/backend-readiness"
+import { ConversationHistorySidebar } from "@/components/conversation-history-sidebar"
+import { CausalMark } from "@/components/causal-mark"
+import { DataPreparationPanel } from "@/components/data-preparation-panel"
+import { normalizeEvidence, type NormalizedEvidence } from "@/components/study-evidence"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  runIntakeAgent,
+  toAgentDraft,
+  type AgentDraft,
+  type AgentDraftField,
+  type AgentFormBlock,
+  type AgentFormSubmission,
+  type AgentHistoryMessage,
+  type AgentTurnResponse,
+} from "@/lib/agent-api"
+import {
+  useAgentSettings,
+  type AgentSettings,
+  type AgentModel,
+} from "@/lib/agent-settings"
+import {
+  createConversation,
+  deleteConversation,
+  getConversation,
+  listConversations,
+  updateConversation,
+  type ConversationSummary,
+} from "@/lib/conversation-api"
+import {
+  defaultMapping,
+  mappingIssues,
+  mappingSummary,
+  parseMappingCorrections,
+  suggestMapping,
+  type ColumnMapping,
+} from "@/lib/column-mapping"
+import {
+  analyzeStudy,
+  createStudyDesign,
+  generateSyntheticDataset,
+  getStudy,
+  getStudyId,
+  profileStudyDataset,
+  type AgentTraceStep,
+  type DatasetPreparationProfile,
+  type StudyDesignInput,
+  type StudyRecord,
+} from "@/lib/studies-api"
+import { cloneTemplate, STUDY_TEMPLATES } from "@/lib/study-templates"
+import { cn } from "@/lib/utils"
+
+type ConversationStage =
+  | "intake"
+  | "review"
+  | "freezing"
+  | "data"
+  | "mapping"
+  | "cleaning"
+  | "lineage"
+  | "analysis"
+  | "complete"
+
+type MessageKind = "text" | "review" | "design" | "result" | "attachment"
+
+type ChatMessage = {
+  id: string
+  role: "agent" | "user" | "tool"
+  text: string
+  kind?: MessageKind
+  attachmentName?: string
+  blocks?: AgentFormBlock[]
+  activityId?: string
+  checkpoint?: ConversationCheckpoint
+}
+
+type ActivityKind = "api" | "python" | "tool" | "storage" | "file"
+type ActivityStatus = "running" | "done" | "error"
+
+type ActivityEvent = {
+  id: string
+  kind: ActivityKind
+  label: string
+  detail?: string
+  status: ActivityStatus
+  startedAt?: number
+  completedAt?: number
+}
+
+const DESIGN_TRACE_STEPS = new Set([
+  "validate_request",
+  "create_causal_contract",
+  "freeze_design_spec",
+  "declare_expected_schema",
+])
+
+const TRACE_NARRATION: Record<string, string> = {
+  validate_request: "The structured inputs passed validation. I’m creating the causal contract next.",
+  create_causal_contract: "The estimand and metric policy are now explicit. Next I’m freezing the design specification.",
+  freeze_design_spec: "The design specification is frozen. I’m declaring the expected evidence schema next.",
+  declare_expected_schema: "The data contract is declared. The frozen design is ready for a dataset.",
+  snapshot_dataset: "The uploaded dataset is hashed and tied to its recorded lineage. I’m running the evidence gates next.",
+  execute_confirmed_cleaning_plan: "The confirmed cleaning plan ran on a working copy. Every operation and row-count change is now in the lineage log.",
+  run_frozen_evidence_gates: "The deterministic diagnostics are complete. I’m executing the estimator declared by the design.",
+  deterministic_rct_estimator: "The randomized AB estimate is complete. I’m applying the frozen decision thresholds next.",
+  two_way_fixed_effects_clustered_estimator: "The Difference-in-Differences estimate is complete. I’m applying the frozen decision thresholds next.",
+  subgroup_consistency_analysis: "The exploratory drilldowns are complete, including Holm-adjusted subgroup tests and Cochran’s Q where the data supports it.",
+  apply_frozen_thresholds: "The pre-committed primary and guardrail rules have been evaluated.",
+}
+
+type AgentTurnPayload = {
+  messages: AgentHistoryMessage[]
+  draft: AgentDraft
+  captured_fields: AgentDraftField[]
+  model: AgentModel
+  locale: string
+}
+
+type ConversationCheckpoint = {
+  input: StudyDesignInput
+  capturedFields: AgentDraftField[]
+  stage: ConversationStage
+  activeFormMessageId: string | null
+  activitiesLength: number
+  artifact: StudyRecord | null
+  mapping: ColumnMapping
+}
+
+type ConversationSnapshot = Record<string, unknown> & {
+  version: 1
+  input: StudyDesignInput
+  captured_fields: AgentDraftField[]
+  stage: ConversationStage
+  messages: ChatMessage[]
+  active_form_message_id: string | null
+  activities: ActivityEvent[]
+  artifact: StudyRecord | null
+  mapping: ColumnMapping
+  custom_title?: string | null
+}
+
+const OPENING_MESSAGE_ID = "agent-opening"
+
+function normalizeCausalTerms(text: string): string {
+  return text.replaceAll("双差分", "双重差分")
+}
+
+function openingMessage(): ChatMessage {
+  return {
+    id: OPENING_MESSAGE_ID,
+    role: "agent",
+    text: "Start with a research question and a testable hypothesis. These will guide the causal study.",
+    blocks: [{
+      type: "form",
+      id: "study-question-and-hypothesis",
+      title: "Research question and hypothesis",
+      description: "Describe the decision to support and why the intervention may change the outcome.",
+      submit_label: "Continue",
+      fields: [
+        {
+          id: "business_question",
+          label: "Research question",
+          control: "textarea",
+          required: true,
+          placeholder: "For example: Does guided onboarding improve seven-day activation?",
+          helper_text: "Describe the change or decision the study will evaluate.",
+          suggested_value: "Should guided onboarding roll out to all eligible new users?",
+          suggestion_basis: "A sample research question. Follow-up questions use your confirmed answers.",
+          options: [],
+        },
+        {
+          id: "hypothesis",
+          label: "Working hypothesis",
+          control: "textarea",
+          required: true,
+          placeholder: "For example: Guided onboarding increases activation by 1 percentage point.",
+          helper_text: "State the expected causal direction and the mechanism.",
+          suggested_value: "Guided onboarding increases seven-day activation by helping new users reach first value faster.",
+          suggestion_basis: "A testable hypothesis based on the sample research question.",
+          options: [],
+        },
+      ],
+    }],
+  }
+}
+
+const WORKFLOW_STEPS = [
+  { label: "Frame", detail: "Question" },
+  { label: "Contract", detail: "Freeze" },
+  { label: "Dataset", detail: "Map" },
+  { label: "Clean", detail: "Confirm" },
+  { label: "Decision", detail: "Report" },
+]
+
+function workflowStepIndex(stage: ConversationStage): number {
+  if (stage === "intake") return 0
+  if (stage === "review" || stage === "freezing") return 1
+  if (stage === "data" || stage === "mapping") return 2
+  if (stage === "cleaning") return 3
+  return 4
+}
+
+function WorkflowRail({ stage }: { stage: ConversationStage }) {
+  const current = workflowStepIndex(stage)
+  return (
+    <div className="mb-7 rounded-2xl border border-border bg-card/75 p-3 shadow-[0_12px_40px_-32px_rgba(15,23,42,0.65)]">
+      <div className="flex items-center justify-between gap-3 px-1">
+        <div><p className="tabular-nums text-[11px] font-semibold normal-case tracking-normal text-muted-foreground">Study flow</p><p className="mt-1 text-xs font-semibold">{WORKFLOW_STEPS[current].label} <span className="font-normal text-muted-foreground">{WORKFLOW_STEPS[current].detail}</span></p></div>
+        <span className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">{String(current + 1).padStart(2, "0")} / {String(WORKFLOW_STEPS.length).padStart(2, "0")}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-5 gap-1.5" aria-label="Study flow progress">
+        {WORKFLOW_STEPS.map((step, index) => {
+          const complete = index < current
+          const active = index === current
+          return <div key={step.label} className="min-w-0"><div className={cn("h-1 rounded-full transition-colors", complete ? "bg-slate-950 dark:bg-slate-100" : active ? "bg-blue-500" : "bg-muted")} /><div className={cn("mt-2 truncate text-[11px] font-semibold", active ? "text-foreground" : "text-muted-foreground")}>{step.label}</div></div>
+        })}
+      </div>
+    </div>
+  )
+}
+
+export function StudyWorkbench() {
+  const searchParams = useSearchParams()
+  const { resolvedTheme, setTheme } = useTheme()
+  const readiness = useBackendReadiness()
+  const requestedConversationId = searchParams.get("conversation")
+  const requestedTemplate = searchParams.get("template") ?? ""
+  const requestedMode = searchParams.get("mode")
+  const templateExists = STUDY_TEMPLATES.some((item) => item.id === requestedTemplate)
+  const startingInput = useMemo(() => {
+    const next = cloneTemplate(requestedTemplate)
+    if (requestedMode === "retrospective" || requestedMode === "prospective") next.mode = requestedMode
+    return next
+  }, [requestedMode, requestedTemplate])
+
+  const [input, setInput] = useState<StudyDesignInput>(() => startingInput)
+  const [stage, setStage] = useState<ConversationStage>(() => templateExists ? "review" : "intake")
+  const [messages, setMessages] = useState<ChatMessage[]>(() => requestedConversationId ? [] : initialMessages(requestedTemplate, templateExists))
+  const [capturedFields, setCapturedFields] = useState<AgentDraftField[]>(() => initialCapturedFields(startingInput, templateExists, requestedMode))
+  const [activeFormMessageId, setActiveFormMessageId] = useState<string | null>(() => requestedConversationId || templateExists ? null : OPENING_MESSAGE_ID)
+  const agentSettings = useAgentSettings()
+  const [settingsRequested, setSettingsRequested] = useState(false)
+  const [draft, setDraft] = useState("")
+  const [artifact, setArtifact] = useState<StudyRecord | null>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [isDraggingFile, setIsDraggingFile] = useState(false)
+  const [columns, setColumns] = useState<string[]>([])
+  const [mapping, setMapping] = useState<ColumnMapping>(() => defaultMapping(startingInput))
+  const [preparationProfile, setPreparationProfile] = useState<DatasetPreparationProfile | null>(null)
+  const [selectedOperationIds, setSelectedOperationIds] = useState<string[]>([])
+  const [selectedDimensions, setSelectedDimensions] = useState<string[]>([])
+  const [lineageConfirmed, setLineageConfirmed] = useState(false)
+  const [activities, setActivities] = useState<ActivityEvent[]>([])
+  const [busy, setBusy] = useState(false)
+  const [typing, setTyping] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [retryAgentRequest, setRetryAgentRequest] = useState<(() => void) | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [conversationLoading, setConversationLoading] = useState(true)
+  const [conversationHydrated, setConversationHydrated] = useState(false)
+  const [conversationSidebarOpen, setConversationSidebarOpen] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [customConversationTitle, setCustomConversationTitle] = useState<string | null>(null)
+  const messageCounter = useRef(0)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const replyTimerRef = useRef<number | null>(null)
+  const agentRequestCounter = useRef(0)
+  const conversationSaveTimer = useRef<number | null>(null)
+  const pendingEditedMessageRef = useRef<string | null>(null)
+
+  const evidence = useMemo(() => artifact ? normalizeEvidence(artifact) : null, [artifact])
+  const studyId = artifact ? getStudyId(artifact) : ""
+  const mappingReady = mappingIssues(mapping, columns, input).length === 0
+  const quickReplies = repliesFor(stage, file, mappingReady)
+  const agentApiConfigured = Boolean(agentSettings.apiKey.trim())
+  const settingsOpen = settingsRequested
+
+  const makeSnapshot = (): ConversationSnapshot => ({
+    version: 1,
+    input,
+    captured_fields: capturedFields,
+    stage,
+    messages,
+    active_form_message_id: activeFormMessageId,
+    activities,
+    artifact,
+    mapping,
+    custom_title: customConversationTitle,
+  })
+
+  const restoreSnapshot = (snapshot: ConversationSnapshot) => {
+    const restoredInput = snapshot.version === 1 && snapshot.input ? snapshot.input : startingInput
+    const rawMessages = Array.isArray(snapshot.messages) && snapshot.messages.length > 0 ? snapshot.messages : [openingMessage()]
+    const rawActivities = Array.isArray(snapshot.activities) ? snapshot.activities : []
+    const restoredConversation = normalizeRestoredConversation(rawMessages, rawActivities)
+    const restoredMessages = restoredConversation.messages
+    const restoredActivities = restoredConversation.activities
+    const restoredStage = snapshot.stage === "freezing"
+      ? "review"
+      : ["mapping", "cleaning", "lineage", "analysis"].includes(snapshot.stage)
+        ? "data"
+        : snapshot.stage ?? "intake"
+    setInput(restoredInput)
+    setStage(restoredStage)
+    setMessages(restoredMessages)
+    setCapturedFields(Array.isArray(snapshot.captured_fields) ? snapshot.captured_fields : [])
+    setActiveFormMessageId(snapshot.active_form_message_id ?? (restoredMessages[0]?.id === OPENING_MESSAGE_ID ? OPENING_MESSAGE_ID : null))
+    setActivities(restoredActivities.map((activity) => activity.status === "running" ? { ...activity, status: "error", detail: "Interrupted before this conversation was restored.", completedAt: Date.now() } : activity))
+    setArtifact(snapshot.artifact ?? null)
+    setMapping(snapshot.mapping ?? defaultMapping(restoredInput))
+    setCustomConversationTitle(snapshot.custom_title?.trim() || null)
+    setFile(null)
+    setColumns([])
+    setPreparationProfile(null)
+    setSelectedOperationIds([])
+    setSelectedDimensions([])
+    setLineageConfirmed(false)
+    setDraft("")
+    setBusy(false)
+    setTyping(false)
+    setError(null)
+    setRetryAgentRequest(null)
+    messageCounter.current = Math.max(restoredMessages.length, ...restoredMessages.map((message) => numericSuffix(message.id)))
+    agentRequestCounter.current = Math.max(restoredActivities.length, ...restoredActivities.map((activity) => activitySequence(activity.id)))
+  }
+
+  const openAgentSettings = () => {
+    setSettingsRequested(true)
+  }
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })
+  }, [messages, typing, busy])
+
+  useEffect(() => () => {
+    if (replyTimerRef.current !== null) window.clearTimeout(replyTimerRef.current)
+    if (conversationSaveTimer.current !== null) window.clearTimeout(conversationSaveTimer.current)
+  }, [])
+
+  useEffect(() => {
+    if (readiness.state !== "ready") return
+    if (requestedConversationId && requestedConversationId === conversationId && conversationHydrated) return
+    let cancelled = false
+
+    const initializeConversation = async () => {
+      setConversationLoading(true)
+      setHistoryError(null)
+      try {
+        const recent = await listConversations()
+        if (cancelled) return
+        setConversations(recent)
+
+        if (requestedConversationId) {
+          const persisted = await getConversation<ConversationSnapshot>(requestedConversationId)
+          if (cancelled) return
+          setConversationHydrated(false)
+          restoreSnapshot(persisted.state)
+          setConversationId(persisted.id)
+          setConversations((current) => upsertConversationSummary(current, persisted))
+        } else {
+          const snapshot = makeSnapshot()
+          const created = await createConversation({
+            title: conversationTitle(snapshot.input, snapshot.messages),
+            status: snapshot.stage,
+            model: agentSettings.model,
+            study_id: studyId || null,
+            state: snapshot,
+          })
+          if (cancelled) return
+          setConversationId(created.id)
+          setConversations((current) => upsertConversationSummary(current, created))
+          const params = new URLSearchParams(searchParams.toString())
+          params.set("conversation", created.id)
+          window.history.replaceState(window.history.state, "", `/studies/new?${params.toString()}`)
+        }
+        setConversationHydrated(true)
+      } catch (caught) {
+        if (cancelled) return
+        setHistoryError(errorMessage(caught))
+      } finally {
+        if (!cancelled) setConversationLoading(false)
+      }
+    }
+
+    void initializeConversation()
+    return () => { cancelled = true }
+    // Conversation state is deliberately loaded only when its URL key changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readiness.state, requestedConversationId])
+
+  useEffect(() => {
+    if (!conversationId || !conversationHydrated || conversationLoading) return
+    if (conversationSaveTimer.current !== null) window.clearTimeout(conversationSaveTimer.current)
+    const snapshot = makeSnapshot()
+    conversationSaveTimer.current = window.setTimeout(() => {
+      void updateConversation(conversationId, {
+        title: snapshot.custom_title?.trim() || conversationTitle(snapshot.input, snapshot.messages),
+        status: snapshot.stage,
+        model: agentSettings.model,
+        study_id: snapshot.artifact ? getStudyId(snapshot.artifact) || null : null,
+        state: snapshot,
+      }).then((saved) => {
+        setConversations((current) => upsertConversationSummary(current, saved))
+        setHistoryError(null)
+      }).catch((caught) => setHistoryError(errorMessage(caught)))
+    }, 450)
+    return () => {
+      if (conversationSaveTimer.current !== null) window.clearTimeout(conversationSaveTimer.current)
+    }
+    // Draft keystrokes are intentionally excluded; only submitted conversation state is saved.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, conversationHydrated, conversationLoading, input, capturedFields, stage, messages, activeFormMessageId, activities, artifact, mapping, customConversationTitle, agentSettings.model])
+
+  const nextMessageId = (role: "agent" | "user" | "tool") => {
+    messageCounter.current += 1
+    return `${role}-${messageCounter.current}`
+  }
+
+  const nextActivityId = (prefix: string) => {
+    agentRequestCounter.current += 1
+    return `${prefix}-${agentRequestCounter.current}`
+  }
+
+  const checkpoint = (overrides?: Partial<ConversationCheckpoint>): ConversationCheckpoint => ({
+    input,
+    capturedFields,
+    stage,
+    activeFormMessageId,
+    activitiesLength: activities.length,
+    artifact,
+    mapping,
+    ...overrides,
+  })
+
+  const appendUser = (text: string, attachmentName?: string, stateCheckpoint: ConversationCheckpoint = checkpoint()) => {
+    const id = nextMessageId("user")
+    setMessages((current) => [...current, {
+      id,
+      role: "user",
+      text,
+      kind: attachmentName ? "attachment" : "text",
+      attachmentName,
+      checkpoint: stateCheckpoint,
+    }])
+    return id
+  }
+
+  const appendTool = (activityId: string) => {
+    const id = nextMessageId("tool")
+    setMessages((current) => [...current, { id, role: "tool", text: "", activityId }])
+    return id
+  }
+
+  const appendAgent = (text: string, kind: MessageKind = "text", blocks: AgentFormBlock[] = []) => {
+    const id = nextMessageId("agent")
+    setMessages((current) => [...current, { id, role: "agent", text: normalizeCausalTerms(text), kind, blocks }])
+    setActiveFormMessageId(blocks.length ? id : null)
+    return id
+  }
+
+  const revealTraceActivities = async (trace: ActivityEvent[]) => {
+    for (const activity of trace) {
+      setActivities((current) => [...current, activity])
+      appendTool(activity.id)
+      await waitForWorkflowStep()
+      const narration = TRACE_NARRATION[activity.label]
+      if (narration) {
+        appendAgent(narration)
+        await waitForWorkflowStep(120)
+      }
+    }
+  }
+
+  const ask = (nextStage: ConversationStage, text: string, kind: MessageKind = "text") => {
+    if (replyTimerRef.current !== null) window.clearTimeout(replyTimerRef.current)
+    setBusy(true)
+    setTyping(true)
+    replyTimerRef.current = window.setTimeout(() => {
+      appendAgent(text, kind)
+      setStage(nextStage)
+      setTyping(false)
+      setBusy(false)
+      replyTimerRef.current = null
+    }, 280)
+  }
+
+  const requestAgentTurn = async (
+    answer?: string,
+    settings: AgentSettings = agentSettings,
+    base?: { history: ChatMessage[]; draft: StudyDesignInput; captured: AgentDraftField[]; checkpoint?: ConversationCheckpoint },
+    replay?: AgentTurnPayload,
+  ) => {
+    if (!settings.apiKey.trim()) {
+      openAgentSettings()
+      setError("Connect an OpenRouter or DeepSeek API key before messaging the study Agent.")
+      return
+    }
+
+    let payload: AgentTurnPayload
+    if (replay) {
+      payload = replay
+    } else {
+      const submittedAnswer = answer?.slice(0, 6000)
+      const sourceMessages = base?.history ?? messages
+      const history: AgentHistoryMessage[] = sourceMessages
+        .filter((message) => message.role !== "tool" && message.kind !== "attachment" && message.text.trim())
+        .map((message): AgentHistoryMessage => ({
+          role: message.role === "agent" ? "assistant" : "user",
+          content: message.text,
+        }))
+        .slice(-28)
+      if (submittedAnswer) {
+        appendUser(submittedAnswer, undefined, base?.checkpoint ?? checkpoint())
+        history.push({ role: "user", content: submittedAnswer })
+      }
+      payload = {
+        messages: history,
+        draft: toAgentDraft(base?.draft ?? input),
+        captured_fields: base?.captured ?? capturedFields,
+        model: settings.model,
+        locale: typeof navigator === "undefined" ? "en" : navigator.language.split("-").slice(0, 2).join("-"),
+      }
+    }
+
+    const previousActiveFormMessageId = base?.checkpoint?.activeFormMessageId ?? activeFormMessageId
+    const previousStage = base?.checkpoint?.stage ?? stage
+    setDraft("")
+    setError(null)
+    setRetryAgentRequest(null)
+    setBusy(true)
+    setTyping(true)
+    setActiveFormMessageId(null)
+    const activityId = nextActivityId("agent")
+    setActivities((current) => [...current, {
+      id: activityId,
+      kind: "api",
+      label: "Agent reasoning",
+      status: "running",
+      startedAt: Date.now(),
+    }])
+    appendTool(activityId)
+
+    try {
+      let response: AgentTurnResponse
+      try {
+        response = await runIntakeAgent(payload, settings.apiKey)
+      } catch (firstAttemptError) {
+        if (!isFailedToFetchError(firstAttemptError)) throw firstAttemptError
+        setActivities((current) => current.map((item) => item.id === activityId
+          ? { ...item, detail: "Connection interrupted — retrying once…", status: "running" }
+          : item))
+        await waitForAgentRetry()
+        response = await runIntakeAgent(payload, settings.apiKey)
+      }
+      setInput((current) => mergeAgentPatch(current, response.draft_patch))
+      setCapturedFields(response.captured_fields)
+      appendAgent(response.message, response.ready_to_freeze ? "review" : "text", response.blocks)
+      setStage(response.ready_to_freeze ? "review" : "intake")
+      setActivities((current) => current.map((item) => item.id === activityId
+        ? { ...item, status: "done", completedAt: Date.now() }
+        : item))
+    } catch (caught) {
+      const message = errorMessage(caught)
+      setError(message)
+      setStage(previousStage)
+      setActiveFormMessageId(previousActiveFormMessageId)
+      setActivities((current) => current.map((item) => item.id === activityId
+        ? { ...item, detail: message, status: "error", completedAt: Date.now() }
+        : item))
+      if (isFailedToFetchError(caught)) {
+        setRetryAgentRequest(() => () => {
+          void requestAgentTurn(undefined, settings, undefined, payload)
+        })
+      }
+      if (/api key|rejected/i.test(message)) openAgentSettings()
+    } finally {
+      setTyping(false)
+      setBusy(false)
+    }
+  }
+
+  const retryFailedAgentRequest = () => {
+    if (!retryAgentRequest || busy) return
+    const retry = retryAgentRequest
+    setRetryAgentRequest(null)
+    retry()
+  }
+
+  const handleAgentFormSubmit = (submission: AgentFormSubmission) => {
+    const direct = formSubmissionDraft(submission)
+    const nextInput = mergeAgentPatch(input, direct.patch)
+    const nextCaptured = Array.from(new Set([...capturedFields, ...direct.captured]))
+    const stateCheckpoint = checkpoint()
+    setInput(nextInput)
+    setCapturedFields(nextCaptured)
+    void requestAgentTurn(submission.summary, agentSettings, {
+      history: messages,
+      draft: nextInput,
+      captured: nextCaptured,
+      checkpoint: stateCheckpoint,
+    })
+  }
+
+  const startNewConversation = async () => {
+    if (replyTimerRef.current !== null) {
+      window.clearTimeout(replyTimerRef.current)
+      replyTimerRef.current = null
+    }
+    setConversationLoading(true)
+    setHistoryError(null)
+    try {
+      const snapshot = emptyConversationSnapshot()
+      const created = await createConversation({
+        title: "New conversation",
+        status: "intake",
+        model: agentSettings.model,
+        study_id: null,
+        state: snapshot,
+      })
+      setConversationHydrated(false)
+      restoreSnapshot(created.state)
+      setConversationId(created.id)
+      setConversations((current) => upsertConversationSummary(current, created))
+      window.location.assign(`/studies/new?conversation=${encodeURIComponent(created.id)}`)
+      setConversationHydrated(true)
+    } catch (caught) {
+      setHistoryError(errorMessage(caught))
+    } finally {
+      setConversationLoading(false)
+    }
+  }
+
+  const openConversation = (nextConversationId: string) => {
+    if (nextConversationId === conversationId || conversationLoading) return
+    setConversationHydrated(false)
+    window.location.assign(`/studies/new?conversation=${encodeURIComponent(nextConversationId)}`)
+  }
+
+  const renameConversation = async (targetConversationId: string, title: string) => {
+    const trimmedTitle = title.trim()
+    if (!trimmedTitle) return
+    setHistoryError(null)
+    try {
+      const state = targetConversationId === conversationId
+        ? { ...makeSnapshot(), custom_title: trimmedTitle }
+        : { ...(await getConversation<ConversationSnapshot>(targetConversationId)).state, custom_title: trimmedTitle }
+      const saved = await updateConversation(targetConversationId, { title: trimmedTitle, state })
+      setConversations((current) => upsertConversationSummary(current, saved))
+      if (targetConversationId === conversationId) setCustomConversationTitle(trimmedTitle)
+    } catch (caught) {
+      setHistoryError(errorMessage(caught))
+      throw caught
+    }
+  }
+
+  const removeConversation = async (targetConversationId: string) => {
+    setHistoryError(null)
+    try {
+      await deleteConversation(targetConversationId)
+      const removedIndex = conversations.findIndex((conversation) => conversation.id === targetConversationId)
+      const remaining = conversations.filter((conversation) => conversation.id !== targetConversationId)
+      setConversations(remaining)
+      if (targetConversationId !== conversationId) return
+
+      setCustomConversationTitle(null)
+      const nextConversation = remaining[Math.min(Math.max(removedIndex, 0), remaining.length - 1)]
+      if (nextConversation) {
+        setConversationHydrated(false)
+        window.location.assign(`/studies/new?conversation=${encodeURIComponent(nextConversation.id)}`)
+      } else {
+        await startNewConversation()
+      }
+    } catch (caught) {
+      setHistoryError(errorMessage(caught))
+      throw caught
+    }
+  }
+
+  const resendEditedMessage = (messageId: string, editedText: string) => {
+    if (busy) return
+    const messageIndex = messages.findIndex((message) => message.id === messageId && message.role === "user")
+    if (messageIndex < 0) return
+    const selected = messages[messageIndex]
+    const branchMessages = messages.slice(0, messageIndex)
+    const restored = selected.checkpoint ?? emptyCheckpoint()
+    setMessages(branchMessages)
+    setInput(restored.input)
+    setCapturedFields(restored.capturedFields)
+    setStage(restored.stage)
+    setActiveFormMessageId(restored.activeFormMessageId)
+    setActivities((current) => current.slice(0, restored.activitiesLength))
+    setArtifact(restored.artifact)
+    setMapping(restored.mapping)
+    if (restored.stage !== "mapping" && restored.stage !== "cleaning" && restored.stage !== "lineage") {
+      setFile(null)
+      setColumns([])
+      setPreparationProfile(null)
+      setSelectedOperationIds([])
+      setSelectedDimensions([])
+      setLineageConfirmed(false)
+    }
+    setError(null)
+    pendingEditedMessageRef.current = editedText
+  }
+
+  const handleAnswer = (rawAnswer?: string) => {
+    const answer = (rawAnswer ?? draft).trim()
+    if (!answer || busy || stage === "freezing" || stage === "analysis" || stage === "complete") return
+    setDraft("")
+    setError(null)
+
+    if (stage === "data") {
+      appendUser(answer)
+      ask("data", "Attach the CSV or Parquet file with the paperclip. I’ll inspect its schema and propose an explicit cleaning plan before anything changes.")
+      return
+    }
+
+    if (stage === "mapping") {
+      appendUser(answer)
+      if (/use|confirm|looks right|使用|确认|没问题/i.test(answer)) confirmMapping()
+      else handleMappingCorrection(answer)
+      return
+    }
+    if (stage === "cleaning") {
+      appendUser(answer)
+      ask("cleaning", "Review the proposed operations and drilldown dimensions above, then use “Confirm plan and analyze”. You can also upload a replacement file.")
+      return
+    }
+    if (stage === "lineage") {
+      appendUser(answer)
+      if (/confirm|no unrecorded|\byes\b|确认|没有未记录|无未记录/i.test(answer)) void runAnalysis()
+      else ask("lineage", "I can’t run the audit until the transformation history is explicit. Confirm there was no unrecorded outcome-dependent cleaning, or upload a properly documented dataset.")
+      return
+    }
+    if (stage === "review" && /freeze|confirm|冻结|确认/i.test(answer)) {
+      appendUser(answer)
+      void freezeDesign()
+      return
+    }
+    if (/restart|重新|重来/i.test(answer)) {
+      void startNewConversation()
+      return
+    }
+    void requestAgentTurn(answer)
+  }
+
+  const handleQuickReply = (label: string) => {
+    if (label === "Attach dataset") return fileInputRef.current?.click()
+    if (label === "Upload another file") {
+      setFile(null)
+      setColumns([])
+      setPreparationProfile(null)
+      setSelectedOperationIds([])
+      setSelectedDimensions([])
+      setLineageConfirmed(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+      setStage("data")
+      appendUser(label)
+      ask("data", "Attach the replacement CSV or Parquet file when you’re ready.")
+      return
+    }
+    if (label === "Restart intake") return void startNewConversation()
+    handleAnswer(label)
+  }
+
+  const canAttachDataset = !busy && (stage === "data" || stage === "mapping" || stage === "cleaning")
+
+  const handleFileDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.dataTransfer.types.includes("Files") && canAttachDataset) setIsDraggingFile(true)
+  }
+
+  const handleFileDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = canAttachDataset ? "copy" : "none"
+    if (event.dataTransfer.types.includes("Files") && canAttachDataset) setIsDraggingFile(true)
+  }
+
+  const handleFileDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDraggingFile(false)
+  }
+
+  const handleFileDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDraggingFile(false)
+    if (!canAttachDataset) return
+    void handleFile(event.dataTransfer.files?.[0] ?? null)
+  }
+
+  const handleFile = async (
+    selected: File | null,
+    options: { allowBusy?: boolean; source?: "attachment" | "synthetic" } = {},
+  ) => {
+    if (!selected || (busy && !options.allowBusy)) return
+    const filename = selected.name.toLowerCase()
+    if (!filename.endsWith(".csv") && !filename.endsWith(".parquet")) {
+      setError("Please attach a CSV or Parquet file.")
+      return
+    }
+    setFile(selected)
+    setPreparationProfile(null)
+    setSelectedOperationIds([])
+    setSelectedDimensions([])
+    setLineageConfirmed(false)
+    setError(null)
+    appendUser(
+      options.source === "synthetic" ? `Generated ${selected.name}` : `Attached ${selected.name}`,
+      selected.name,
+    )
+    setBusy(true)
+    setStage("mapping")
+    const activityId = nextActivityId("file")
+    setActivities((current) => [...current, { id: activityId, kind: "file", label: "Inspect dataset schema", detail: selected.name, status: "running" }])
+    appendTool(activityId)
+
+    let detectedColumns: string[] = []
+    if (selected.name.toLowerCase().endsWith(".csv")) {
+      try {
+        const firstChunk = await selected.slice(0, 16_384).text()
+        detectedColumns = parseCsvHeader(firstChunk.split(/\r?\n/, 1)[0])
+      } catch {
+        detectedColumns = []
+      }
+    }
+    setColumns(detectedColumns)
+    const suggestion = suggestMapping(defaultMapping(input), detectedColumns, input)
+    setMapping(suggestion)
+    setActivities((current) => current.map((item) => item.id === activityId ? { ...item, detail: detectedColumns.length ? `${detectedColumns.length} columns detected` : "Schema preview unavailable", status: "done" } : item))
+
+    const issues = mappingIssues(suggestion, detectedColumns, input)
+    const columnPreview = detectedColumns.length
+      ? ` Available columns: ${detectedColumns.slice(0, 20).join(", ")}${detectedColumns.length > 20 ? ", …" : ""}.`
+      : ""
+    const message = issues.length
+      ? `I found ${detectedColumns.length} columns, but I’m not confident about: ${issues.join(", ")}.${columnPreview} Reply with corrections such as “unit=user_id, treatment=variant, metric=outcome”.`
+      : `I found ${detectedColumns.length || "the proposed"} columns and prepared a mapping: ${mappingSummary(suggestion, input)}. Confirm it or reply with corrections.`
+    setTyping(true)
+    if (replyTimerRef.current !== null) window.clearTimeout(replyTimerRef.current)
+    replyTimerRef.current = window.setTimeout(() => {
+      appendAgent(message)
+      setTyping(false)
+      setBusy(false)
+      replyTimerRef.current = null
+    }, 220)
+  }
+
+  const handleSyntheticDataset = async () => {
+    if (!canAttachDataset || !artifact || !studyId) return
+    setError(null)
+    setBusy(true)
+    const activityId = nextActivityId("synthetic")
+    setActivities((current) => [...current, {
+      id: activityId,
+      kind: "python",
+      label: "Generate synthetic dataset",
+      detail: "Use the frozen design contract and entered planning parameters",
+      status: "running",
+      startedAt: Date.now(),
+    }])
+    appendTool(activityId)
+    try {
+      const generated = await generateSyntheticDataset(studyId, {
+        baseline_value: input.baseline_rate,
+        outcome_standard_deviation: input.outcome_standard_deviation,
+      })
+      setActivities((current) => current.map((activity) => activity.id === activityId
+        ? { ...activity, status: "done", detail: `${generated.name} · frozen contract`, completedAt: Date.now() }
+        : activity))
+      appendAgent("Synthetic data is ready from the frozen design contract. I’m inspecting its schema and will propose the same explicit cleaning plan used for an uploaded dataset.")
+      await handleFile(generated, { allowBusy: true, source: "synthetic" })
+    } catch (caught) {
+      const message = errorMessage(caught)
+      setError(message)
+      setActivities((current) => current.map((activity) => activity.id === activityId
+        ? { ...activity, status: "error", detail: message, completedAt: Date.now() }
+        : activity))
+      appendAgent(`I couldn’t generate synthetic data: ${message}`)
+      setBusy(false)
+    }
+  }
+
+  const handleMappingCorrection = (answer: string) => {
+    const corrected = parseMappingCorrections(mapping, answer, input)
+    setMapping(corrected)
+    const issues = mappingIssues(corrected, columns, input)
+    if (issues.length) ask("mapping", `I applied what I could, but these roles are still unresolved: ${issues.join(", ")}.`)
+    else ask("mapping", `Updated. The mapping is now ${mappingSummary(corrected, input)}. Confirm to continue.`)
+  }
+
+  const confirmMapping = async () => {
+    const issues = mappingIssues(mapping, columns, input)
+    if (issues.length) {
+      ask("mapping", `I still need valid columns for: ${issues.join(", ")}. Reply with role=column pairs.`)
+      return
+    }
+    if (!artifact || !studyId || !file) {
+      setError("A frozen design and dataset are required before profiling.")
+      return
+    }
+    setStage("cleaning")
+    setBusy(true)
+    setError(null)
+    const activityId = nextActivityId("file-profile")
+    setActivities((current) => [...current, {
+      id: activityId,
+      kind: "python",
+      label: "Profile data and propose a cleaning plan",
+      detail: file.name,
+      status: "running",
+      startedAt: Date.now(),
+    }])
+    appendTool(activityId)
+    try {
+      const profile = await profileStudyDataset(studyId, file, {
+        unit_col: mapping.unit_col,
+        treatment_col: mapping.treatment_col,
+        metric_cols: mapping.metric_cols,
+        ...(input.design_type === "did" ? { time_col: mapping.time_col } : {}),
+        covariate_cols: mapping.covariate_cols,
+        dimension_cols: mapping.dimension_cols,
+      })
+      setPreparationProfile(profile)
+      setSelectedOperationIds(profile.operations.map((operation) => operation.id))
+      setSelectedDimensions(profile.suggested_dimensions)
+      setMapping((current) => ({ ...current, dimension_cols: profile.suggested_dimensions }))
+      setLineageConfirmed(false)
+      setActivities((current) => current.map((activity) => activity.id === activityId
+        ? { ...activity, status: "done", detail: `${profile.row_count.toLocaleString()} rows · ${profile.operations.length} proposed operation(s)`, completedAt: Date.now() }
+        : activity))
+      appendAgent("I profiled the upload without sending raw rows to the language model. Review the cleaning plan and the proposed drilldown dimensions below; nothing has been changed yet.")
+    } catch (caught) {
+      const message = errorMessage(caught)
+      setError(message)
+      setActivities((current) => current.map((activity) => activity.id === activityId
+        ? { ...activity, status: "error", detail: message, completedAt: Date.now() }
+        : activity))
+      appendAgent(`I couldn’t prepare a cleaning plan: ${message}`)
+      setStage("mapping")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const freezeDesign = async () => {
+    if (readiness.state !== "ready") {
+      setError("The analysis engine is still warming. The conversation is preserved; freeze when the engine is ready.")
+      appendAgent("The analysis engine is still warming. I’ve kept every answer and will not freeze the contract until the service is ready.")
+      setStage("review")
+      return
+    }
+    setStage("freezing")
+    setBusy(true)
+    setTyping(false)
+    appendAgent("I’m compiling the causal contract now. I’ll validate the inputs, calculate the design, freeze the policy, and persist the evidence schema.")
+    const requestId = nextActivityId("api-design")
+    setActivities((current) => [...current, { id: requestId, kind: "api", label: "POST /api/studies/design", detail: "Compile study design", status: "running" }])
+    appendTool(requestId)
+    try {
+      const response = await createStudyDesign(input)
+      if (!getStudyId(response)) throw new Error("The server returned a design without a study identifier.")
+      setArtifact(response)
+      setMapping(defaultMapping(input))
+      const normalized = normalizeEvidence(response)
+      const trace = traceActivities(normalized.trace, requestId)
+      setActivities((current) => current.map((item) => item.id === requestId ? { ...item, detail: "200 · design persisted", status: "done" as const } : item))
+      await revealTraceActivities(trace)
+      setMessages((current) => [...current, {
+        id: nextMessageId("agent"),
+        role: "agent",
+        text: "The design is frozen. The identifiers, assumptions, data contract, and decision thresholds are now versioned.",
+        kind: "design",
+      }])
+      setStage("data")
+    } catch (caught) {
+      const message = errorMessage(caught)
+      setError(message)
+      setActivities((current) => current.map((item) => item.id === requestId ? { ...item, detail: message, status: "error" } : item))
+      appendAgent(`I couldn’t freeze the design: ${message}`)
+      setStage("review")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const runAnalysis = async () => {
+    if (!artifact || !studyId || !file || !preparationProfile) {
+      setError("A frozen design and dataset are required before analysis.")
+      return
+    }
+    if (!lineageConfirmed) {
+      setError("Confirm the upstream lineage and cleaning plan before analysis.")
+      return
+    }
+    if (readiness.state !== "ready") {
+      setError("The analysis engine is not ready yet. Your dataset mapping is preserved.")
+      return
+    }
+    setStage("analysis")
+    setBusy(true)
+    setError(null)
+    appendAgent("I’m binding the dataset to the frozen contract. The deterministic pipeline will hash the data, run evidence gates, execute the declared estimator, and apply the decision policy.")
+    const requestId = nextActivityId("api-analysis")
+    setActivities((current) => [...current, { id: requestId, kind: "api", label: `POST /api/studies/${studyId.slice(0, 12)}/analyze`, detail: file.name, status: "running" }])
+    appendTool(requestId)
+    try {
+      const mappingPayload = {
+        unit_col: mapping.unit_col,
+        treatment_col: mapping.treatment_col,
+        metric_cols: mapping.metric_cols,
+        ...(input.design_type === "did" ? { time_col: mapping.time_col } : {}),
+        covariate_cols: mapping.covariate_cols,
+        dimension_cols: selectedDimensions,
+      }
+      const selectedOperations = preparationProfile.operations
+        .filter((operation) => selectedOperationIds.includes(operation.id))
+        .map((operation) => ({
+          operation: operation.operation,
+          columns: operation.operation === "fill_missing_dimensions"
+            ? operation.columns.filter((column) => selectedDimensions.includes(column))
+            : operation.operation === "trim_string_values"
+              ? operation.columns.filter((column) => !preparationProfile.suggested_dimensions.includes(column) || selectedDimensions.includes(column))
+              : operation.columns,
+        }))
+        .filter((operation) => operation.operation === "drop_exact_duplicates" || operation.columns.length > 0)
+      const result = await analyzeStudy(studyId, file, mappingPayload, {
+        transformation_log: [],
+        cleaning_plan: {
+          source_sha256: preparationProfile.source_sha256,
+          operations: selectedOperations,
+        },
+      })
+      let detail: StudyRecord | null = null
+      try {
+        detail = await getStudy(studyId)
+      } catch {
+        // The analysis response already contains the complete run.
+      }
+      const merged = mergeArtifacts(artifact, result, detail)
+      setArtifact(merged)
+      const normalized = normalizeEvidence(merged)
+      const analysisTrace = normalized.trace.filter((item) => !DESIGN_TRACE_STEPS.has(item.step))
+      const trace = traceActivities(analysisTrace, requestId)
+      setActivities((current) => current.map((item) => item.id === requestId ? { ...item, detail: "200 · result persisted", status: "done" as const } : item))
+      await revealTraceActivities(trace)
+      setMessages((current) => [...current, {
+        id: nextMessageId("agent"),
+        role: "agent",
+        text: String(normalized.decision.summary ?? "The audit and analysis are complete."),
+        kind: "result",
+      }])
+      setStage("complete")
+    } catch (caught) {
+      const message = errorMessage(caught)
+      setError(message)
+      setActivities((current) => current.map((item) => item.id === requestId ? { ...item, detail: message, status: "error" } : item))
+      appendAgent(`The analysis stopped before a decision was produced: ${message}`)
+      setStage("cleaning")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    const editedText = pendingEditedMessageRef.current
+    if (!editedText) return
+    pendingEditedMessageRef.current = null
+    const timer = window.setTimeout(() => handleAnswer(editedText), 0)
+    return () => window.clearTimeout(timer)
+    // Re-dispatch only after the checkpoint state and branched history commit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages])
+
+  return (
+    <>
+      <AgentSettingsDialog
+        open={settingsOpen}
+        onOpenChange={(open) => {
+          setSettingsRequested(open)
+        }}
+        settings={agentSettings}
+        onSaved={() => {
+          setSettingsRequested(false)
+          setError(null)
+        }}
+      />
+      <div className="flex h-dvh overflow-hidden bg-background">
+        <ConversationHistorySidebar
+          conversations={conversations}
+          activeConversationId={conversationId}
+          loading={conversationLoading}
+          open={conversationSidebarOpen}
+          onOpenChange={setConversationSidebarOpen}
+          onSelect={openConversation}
+          onNew={() => void startNewConversation()}
+          onRename={renameConversation}
+          onDelete={removeConversation}
+        />
+
+        <section className="relative flex min-w-0 flex-1 flex-col" aria-label="Study conversation">
+          <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-14 items-center justify-between px-3 sm:px-5">
+            <Button type="button" variant="ghost" size="icon-sm" className="pointer-events-auto rounded-lg lg:hidden" onClick={() => setConversationSidebarOpen(true)} aria-label="Open conversation history"><PanelLeft className="h-4 w-4" /></Button>
+            <div className="pointer-events-auto hidden items-center gap-2 pl-2 text-xs sm:flex"><h1 className="font-semibold tracking-normal">Study builder</h1><span className="text-muted-foreground">{WORKFLOW_STEPS[workflowStepIndex(stage)].label}</span></div>
+            <div className="pointer-events-auto ml-auto flex items-center gap-1">
+              <Link href="/studies/replay" className="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-primary transition hover:bg-muted lg:inline-flex">Live demonstration <ArrowUpRight className="h-3.5 w-3.5" /></Link>
+              <Button type="button" variant="ghost" size="icon-sm" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")} className="rounded-lg text-muted-foreground" aria-label="Toggle color theme" title="Toggle color theme">
+                <Moon className="h-4 w-4 dark:hidden" />
+                <Sun className="hidden h-4 w-4 dark:block" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" onClick={openAgentSettings} className="rounded-lg text-muted-foreground" aria-label="Agent settings" title="Agent settings"><Settings2 className="h-4 w-4" /></Button>
+            </div>
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-6 pt-20 sm:px-6">
+            <div className="mx-auto max-w-3xl space-y-6">
+              <WorkflowRail stage={stage} />
+              {stage === "intake" && !artifact && !busy && (
+                <section className="workbench-starter" aria-labelledby="workbench-start-title">
+                  <div className="flex items-center gap-2 text-primary"><CausalMark className="h-6 w-6" /><span className="text-[11px] font-medium">Study workspace</span></div>
+                  <h2 id="workbench-start-title" className="mt-3">Start with a question, or explore a sample study.</h2>
+                  <p>Sample studies include a complete draft contract. Freeze the design, then load demo data or attach your own CSV or Parquet file.</p>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    <Link href="/studies/new?template=onboarding" className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-3 text-[12px] font-medium hover:border-primary/40 hover:text-primary"><span className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-primary" />Onboarding A/B study</span><ArrowUpRight className="h-3.5 w-3.5" /></Link>
+                    <Link href="/studies/new?template=regional-rollout" className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-3 text-[12px] font-medium hover:border-primary/40 hover:text-primary"><span className="flex items-center gap-2"><Database className="h-4 w-4 text-teal-600" />Regional rollout study</span><ArrowUpRight className="h-3.5 w-3.5" /></Link>
+                  </div>
+                  {!agentApiConfigured && <p className="!mt-4 border-t border-border pt-3">For a custom conversation, <button type="button" onClick={openAgentSettings} className="text-primary hover:underline">connect a model</button>. The <Link href="/studies/replay" className="text-primary hover:underline">guided demonstration</Link> runs with the statistical engine alone.</p>}
+                </section>
+              )}
+              {conversationLoading && !conversationHydrated && <p className="py-10 text-center text-sm text-muted-foreground">Loading conversation…</p>}
+              {readiness.state === "unavailable" && (
+                <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-xs text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-100">
+                  <span>The analysis engine is unavailable.</span>
+                  <Button type="button" variant="ghost" size="sm" className="rounded-lg" onClick={readiness.retry}><RefreshCw className="h-3.5 w-3.5" />Retry</Button>
+                </div>
+              )}
+              {messages.map((message) => (
+                <ConversationMessage
+                  key={`${conversationId ?? "pending"}-${message.id}`}
+                  message={message}
+                  activity={message.activityId ? activities.find((item) => item.id === message.activityId) : undefined}
+                  input={input}
+                  capturedFields={capturedFields}
+                  evidence={evidence}
+                  studyId={studyId}
+                  active={message.id === activeFormMessageId}
+                  busy={busy}
+                  onFormSubmit={handleAgentFormSubmit}
+                  onResend={resendEditedMessage}
+                />
+              ))}
+              {stage === "data" && !busy && (
+                <section className="workbench-starter" aria-label="Choose a data source">
+                  <h2>Bring the design to life.</h2><p>Generate a synthetic dataset from this frozen contract, or attach a CSV or Parquet file. Both paths use the same data checks and analysis.</p>
+                  <div className="mt-4 flex flex-wrap gap-2"><Button type="button" onClick={() => void handleSyntheticDataset()} className="rounded-lg shadow-none"><Database className="h-4 w-4" />Load demo data<ArrowRight className="h-4 w-4" /></Button><Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} className="rounded-lg shadow-none"><UploadCloud className="h-4 w-4" />Upload a dataset</Button></div>
+                </section>
+              )}
+              {stage === "cleaning" && preparationProfile && (
+                <DataPreparationPanel
+                  profile={preparationProfile}
+                  selectedOperationIds={selectedOperationIds}
+                  selectedDimensions={selectedDimensions}
+                  lineageConfirmed={lineageConfirmed}
+                  busy={busy}
+                  onToggleOperation={(id, checked) => setSelectedOperationIds((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))}
+                  onToggleDimension={(dimension, checked) => setSelectedDimensions((current) => checked ? [...new Set([...current, dimension])] : current.filter((item) => item !== dimension))}
+                  onLineageConfirmed={setLineageConfirmed}
+                  onConfirm={() => void runAnalysis()}
+                />
+              )}
+              {typing && !activities.some((activity) => activity.id.startsWith("agent-") && activity.status === "running") && <TypingMessage />}
+              {historyError && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">History sync paused: {historyError}</div>}
+              {error && (
+                <div role="alert" className="flex max-w-2xl items-start gap-3 rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-100"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span className="min-w-0 flex-1">{error}</span>{retryAgentRequest && <Button type="button" variant="ghost" size="icon-sm" onClick={retryFailedAgentRequest} className="-my-1 shrink-0 text-rose-800 hover:bg-rose-100 hover:text-rose-950 dark:text-rose-100 dark:hover:bg-rose-900/50 dark:hover:text-white" aria-label="Retry agent request" title="Retry"><RefreshCw className="h-4 w-4" /></Button>}</div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+          </div>
+
+          <div className="shrink-0 bg-background/92 px-4 pb-4 pt-2 backdrop-blur-xl sm:px-6">
+            <div className="mx-auto max-w-3xl">
+              {(quickReplies.length > 0 || canAttachDataset) && (
+                <div className="mb-2.5 flex gap-2 overflow-x-auto pb-1" aria-label={canAttachDataset ? "Dataset actions" : "Suggested replies"}>
+                  {quickReplies.map((reply) => <button key={reply} type="button" onClick={() => handleQuickReply(reply)} disabled={busy} className="shrink-0 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm transition hover:border-slate-400 hover:bg-muted disabled:opacity-50">{reply}</button>)}
+                  {canAttachDataset && <button type="button" onClick={() => void handleSyntheticDataset()} className="shrink-0 rounded-lg border border-primary/25 bg-accent px-3 py-1.5 text-xs font-medium text-primary transition hover:border-primary" aria-label="Generate synthetic data" title="Generate a dataset from the frozen design">Load demo data</button>}
+                </div>
+              )}
+              <div
+                data-testid="dataset-dropzone"
+                className={cn(
+                  "relative rounded-2xl border border-border bg-card p-2 shadow-[0_12px_36px_-28px_rgba(15,23,42,0.65)] focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-400/15",
+                  isDraggingFile && "border-slate-500 bg-slate-50 ring-2 ring-slate-400/30 dark:bg-slate-900/60",
+                )}
+                onDragEnter={handleFileDragEnter}
+                onDragOver={handleFileDragOver}
+                onDragLeave={handleFileDragLeave}
+                onDrop={handleFileDrop}
+              >
+                {isDraggingFile && canAttachDataset && (
+                  <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-2xl border-2 border-dashed border-slate-500 bg-background/90 px-4 text-center text-xs font-semibold text-foreground backdrop-blur-sm">
+                    Drop CSV or Parquet here to attach the dataset
+                  </div>
+                )}
+                <Textarea
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault()
+                      handleAnswer()
+                    }
+                  }}
+                  rows={1}
+                  maxLength={6000}
+                  placeholder={!agentApiConfigured && stage === "intake" ? "Connect a model to start the conversation…" : placeholderFor(stage)}
+                  disabled={conversationLoading || busy || stage === "complete" || (!agentApiConfigured && stage === "intake")}
+                  className="max-h-36 min-h-11 resize-none border-0 bg-transparent px-3 py-2.5 shadow-none focus-visible:ring-0 dark:bg-transparent"
+                  aria-label="Message the causal agent"
+                />
+                <div className="flex items-center justify-between gap-3 px-1 pb-1">
+                  <div className="flex items-center gap-1">
+                    <input ref={fileInputRef} type="file" accept=".csv,.parquet" className="sr-only" onChange={(event) => void handleFile(event.target.files?.[0] ?? null)} />
+                    <Button type="button" variant="ghost" size="icon-sm" onClick={() => fileInputRef.current?.click()} disabled={busy || (stage !== "data" && stage !== "mapping" && stage !== "cleaning")} className="rounded-lg text-muted-foreground" aria-label="Attach dataset" title="Attach CSV or Parquet"><Paperclip className="h-4 w-4 translate-y-0.5" /></Button>
+                    {!agentApiConfigured && stage === "intake" && <Button type="button" variant="ghost" size="sm" onClick={openAgentSettings} className="rounded-lg text-xs"><KeyRound className="h-3.5 w-3.5" /> Configure model</Button>}
+                  </div>
+                  <Button type="button" size="icon-sm" onClick={() => handleAnswer()} disabled={!draft.trim() || conversationLoading || busy || stage === "complete" || (!agentApiConfigured && stage === "intake")} className="rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white" aria-label="Send message"><Send className="h-4 w-4" /></Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <aside className="workbench-inspector hidden xl:block" aria-label="Study evidence inspector">
+          <p className="section-kicker">Study record</p><h2 className="mt-2 text-[16px] font-semibold">Evidence at a glance</h2>
+          <p className="mt-3 text-[12px] leading-6 text-muted-foreground">The conversation builds a structured study. Its confirmed assumptions appear here.</p>
+          <dl className="mt-6 space-y-5">
+            {[ ["Research question", capturedFields.includes("business_question") ? input.business_question : "Define the question in the conversation."], ["Method", capturedFields.includes("design_type") ? input.design_type === "did" ? "Difference-in-differences" : "Randomized A/B" : "Awaiting study design"], ["Primary metric", capturedFields.includes("primary_metric") ? input.primary_metric : "Awaiting metric definition"], ["Design status", artifact ? "Frozen and versioned" : "Draft / Open for review"], ["Dataset", file?.name ?? "Load demo data or upload after freezing."] ].map(([label, value]) => <div key={label}><dt className="text-[11px] text-muted-foreground">{label}</dt><dd className="mt-1.5 break-words text-[12px] leading-6">{value}</dd></div>)}
+          </dl>
+          {studyId && <Link href={`/studies/${studyId}`} className="mt-6 flex items-center justify-between border-t border-border pt-4 text-[12px] text-primary">Open evidence record<ArrowUpRight className="h-3.5 w-3.5" /></Link>}
+          <div className="mt-7 border-t border-border pt-5"><p className="section-kicker">Recent execution</p><div className="mt-3 space-y-4">{activities.length ? activities.slice(-4).map((activity) => <div key={activity.id} className="flex items-start gap-2"><ActivityIcon kind={activity.kind} status={activity.status} /><div className="min-w-0"><p className="break-words text-[11px] leading-5 text-muted-foreground">{activity.label.replaceAll("_", " ")}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{activity.status === "done" ? "Completed" : activity.status === "running" ? "Running" : "Needs attention"}</p></div></div>) : <p className="text-[11px] leading-6 text-muted-foreground">Completed tools and data checks will be recorded here.</p>}</div></div>
+        </aside>
+      </div>
+    </>
+  )
+}
+
+function ConversationMessage({
+  message,
+  activity,
+  input,
+  capturedFields,
+  evidence,
+  studyId,
+  active,
+  busy,
+  onFormSubmit,
+  onResend,
+}: {
+  message: ChatMessage
+  activity?: ActivityEvent
+  input: StudyDesignInput
+  capturedFields: AgentDraftField[]
+  evidence: NormalizedEvidence | null
+  studyId: string
+  active: boolean
+  busy: boolean
+  onFormSubmit: (submission: AgentFormSubmission) => void
+  onResend: (messageId: string, editedText: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState(message.text)
+  const [copied, setCopied] = useState(false)
+  const copyTimerRef = useRef<number | null>(null)
+
+  useEffect(() => () => {
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
+  }, [])
+
+  if (message.role === "tool") {
+    if (!activity) return null
+    return <ToolActivityMessage activity={activity} />
+  }
+
+  const agent = message.role === "agent"
+  const displayText = normalizeCausalTerms(message.text)
+
+  const copyMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(message.text)
+      setCopied(true)
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  const resend = () => {
+    const nextText = editText.trim()
+    if (!nextText || busy) return
+    setEditing(false)
+    if (nextText !== message.text) onResend(message.id, nextText)
+  }
+
+  return (
+    <article className={cn("flex gap-3", !agent && "justify-end")}>
+      <div className={cn("min-w-0", agent ? "max-w-[min(100%,48rem)] flex-1" : "group relative max-w-[min(85%,42rem)]")}>
+        {editing ? (
+          <div className="min-w-[min(34rem,78vw)] rounded-2xl border border-border bg-[#f4f4f4] p-2 shadow-sm dark:bg-[#2f2f2f]">
+            <Textarea
+              value={editText}
+              onChange={(event) => setEditText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault()
+                  resend()
+                }
+                if (event.key === "Escape") {
+                  setEditText(message.text)
+                  setEditing(false)
+                }
+              }}
+              autoFocus
+              rows={2}
+              maxLength={6000}
+              className="max-h-48 min-h-20 resize-y border-0 bg-transparent text-sm leading-6 text-slate-950 shadow-none focus-visible:ring-0 dark:bg-transparent dark:text-slate-50"
+              aria-label="Edit message"
+            />
+            <div className="mt-1 flex justify-end gap-1.5">
+              <Button type="button" variant="ghost" size="sm" className="rounded-lg" onClick={() => { setEditText(message.text); setEditing(false) }}><X className="h-3.5 w-3.5" />Cancel</Button>
+              <Button type="button" size="sm" className="rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white" onClick={resend} disabled={!editText.trim() || busy}><Send className="h-3.5 w-3.5" />Send</Button>
+            </div>
+          </div>
+        ) : (
+          <div className={cn("whitespace-pre-wrap text-sm leading-6", agent ? "pt-1 text-foreground" : "rounded-2xl rounded-br-md bg-[#f4f4f4] px-4 py-2.5 text-slate-950 dark:bg-[#2f2f2f] dark:text-slate-50")}>
+            {message.kind === "attachment" ? <span className="flex items-center gap-2"><FileSpreadsheet className="h-4 w-4" />{message.attachmentName}</span> : displayText}
+          </div>
+        )}
+        {!agent && !editing && (
+          <div className="absolute -bottom-8 right-0 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-background/95 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            <Button type="button" variant="ghost" size="icon-sm" className="h-6 w-6 rounded-md text-muted-foreground" onClick={() => void copyMessage()} aria-label="Copy message" title="Copy message">{copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</Button>
+            {message.kind !== "attachment" && <Button type="button" variant="ghost" size="icon-sm" className="h-6 w-6 rounded-md text-muted-foreground" onClick={() => setEditing(true)} disabled={busy} aria-label="Edit and resend message" title="Edit and resend"><Pencil className="h-3.5 w-3.5" /></Button>}
+          </div>
+        )}
+        {agent && message.blocks?.map((block) => <AgentFormCard key={block.id} block={block} active={active} busy={busy} onSubmit={onFormSubmit} />)}
+        {agent && message.kind === "review" && <IntakeSummary input={input} capturedFields={capturedFields} />}
+        {agent && message.kind === "design" && evidence && <DesignSummary evidence={evidence} input={input} />}
+        {agent && message.kind === "result" && evidence && <ResultSummary evidence={evidence} input={input} studyId={studyId} />}
+      </div>
+    </article>
+  )
+}
+
+function ToolActivityMessage({ activity }: { activity: ActivityEvent }) {
+  const elapsed = useActivityElapsed(activity)
+  const isAgentReasoning = activity.id.startsWith("agent-")
+
+  if (isAgentReasoning) {
+    const label = activity.status === "running"
+      ? `Thinking… ${formatElapsed(elapsed)}`
+      : activity.status === "done"
+        ? `Worked for ${formatElapsed(elapsed)}`
+        : `Stopped after ${formatElapsed(elapsed)}`
+    return (
+      <div
+        className={cn("flex items-center gap-2 py-1 text-xs", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}
+        aria-live={activity.status === "running" ? "polite" : undefined}
+      >
+        <span className={cn("h-2 w-2 rounded-full bg-current", activity.status === "running" && "animate-pulse")} />
+        <span>{label}</span>
+      </div>
+    )
+  }
+
+  return (
+    <article className="flex max-w-2xl items-start gap-2 py-1" aria-live={activity.status === "running" ? "polite" : undefined}>
+      <ActivityIcon kind={activity.kind} status={activity.status} />
+      <div className="min-w-0 flex-1 pt-0.5">
+        <p className={cn("text-[11px] font-medium", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.label}</p>
+        {activity.detail && <p className={cn("mt-0.5 text-[11px] leading-4", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.detail}</p>}
+      </div>
+    </article>
+  )
+}
+
+function TypingMessage() {
+  return <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground" aria-label="Agent is responding"><span className="h-2 w-2 animate-pulse rounded-full bg-current" /><span>Thinking…</span></div>
+}
+
+function useActivityElapsed(activity: ActivityEvent): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (activity.status !== "running") return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [activity.status])
+  const startedAt = activity.startedAt ?? activity.completedAt ?? now
+  return Math.max(0, (activity.completedAt ?? now) - startedAt)
+}
+
+function formatElapsed(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
+}
+
+function IntakeSummary({ input, capturedFields }: { input: StudyDesignInput; capturedFields: AgentDraftField[] }) {
+  const captured = new Set<AgentDraftField>(capturedFields)
+  const fields = [
+    ["Decision", captured.has("business_question") ? input.business_question : "Not captured"],
+    ["Population", captured.has("population") ? input.population : "Not captured"],
+    ["Intervention", captured.has("intervention") ? input.intervention : "Not captured"],
+    ["Comparator", captured.has("comparison") ? input.comparison : "Not captured"],
+    ["Primary metric", captured.has("primary_metric") ? input.primary_metric : "Not captured"],
+    ["Minimum effect", captured.has("success_threshold") ? formatMinimumEffect(input.success_threshold, input.metric_type, input.primary_direction) : "Not captured"],
+    ["Desired direction", captured.has("primary_direction") ? input.primary_direction === "decrease" ? "Lower is better" : "Higher is better" : "Not captured"],
+    ["Design", captured.has("design_type") ? input.design_type === "rct" ? "Randomized A/B" : "Difference-in-differences" : "Not captured"],
+    ["Analysis unit", captured.has("randomization_unit") ? input.randomization_unit : "Not captured"],
+    ["Group labels", captured.has("control_group") && captured.has("treatment_group") ? `${input.control_group} / ${input.treatment_group}` : "Not captured"],
+  ]
+  return (
+    <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-3"><span className="flex items-center gap-2 text-xs font-semibold"><MessageSquareText className="h-4 w-4 text-muted-foreground" />Captured contract</span><span className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">Draft</span></div>
+      <dl className="grid sm:grid-cols-2">
+        {fields.map(([label, value], index) => <div key={label} className={cn("border-border px-4 py-3", index > 1 && "border-t", index % 2 === 1 && "sm:border-l", index === 1 && "border-t sm:border-t-0")}><dt className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">{label}</dt><dd className="mt-1.5 text-xs font-medium leading-5">{value}</dd></div>)}
+      </dl>
+      <div className="border-t border-border px-4 py-3 text-[11px] leading-5 text-muted-foreground">Planning defaults: α = {input.alpha}, power = {input.power ?? 0.8}{input.design_type === "rct" && captured.has("allocation_treatment") ? `, treatment allocation = ${(input.allocation_treatment ?? 0.5) * 100}%` : ""}. The outcome window is {captured.has("metric_window_days") ? `${input.metric_window_days} days` : "not captured"}. Nothing is frozen until you confirm.</div>
+    </div>
+  )
+}
+
+function DesignSummary({ evidence, input }: { evidence: NormalizedEvidence; input: StudyDesignInput }) {
+  const design = evidence.design
+  const sample = numberValue(design.required_total_sample_size)
+  const duration = numberValue(design.estimated_duration_days)
+  const specHash = String(design.spec_hash ?? "—")
+  const metrics = input.design_type === "rct"
+    ? [
+        { label: "Method", value: "Randomized A/B" },
+        { label: "Required sample", value: sample === null ? "—" : Math.round(sample).toLocaleString(), mono: true },
+        { label: "Est. duration", value: duration === null ? "—" : `${Math.round(duration)} days`, mono: true },
+        { label: "Primary metric", value: input.primary_metric, mono: true },
+      ]
+    : [
+        { label: "Method", value: "Difference-in-Differences" },
+        { label: "Treatment start", value: String(design.treatment_start ?? input.treatment_start ?? "—"), mono: true },
+        { label: "Min. pre-periods", value: String(design.minimum_pre_periods ?? input.minimum_pre_periods ?? "—"), mono: true },
+        { label: "Primary metric", value: input.primary_metric, mono: true },
+      ]
+  return (
+    <div className="mt-4 rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between gap-4"><span className="flex items-center gap-2 text-xs font-semibold"><CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300" />Design frozen</span><code className="text-[11px] text-muted-foreground">{specHash.length > 14 ? `${specHash.slice(0, 8)}…${specHash.slice(-4)}` : specHash}</code></div>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {metrics.map((metric) => <SummaryMetric key={metric.label} {...metric} />)}
+      </div>
+      <p className="mt-4 border-t border-border pt-3 text-[11px] leading-5 text-muted-foreground"><UploadCloud className="mr-1.5 inline h-3.5 w-3.5" />Attach a CSV or Parquet file below. The Agent will profile it and ask you to confirm any proposed cleaning before analysis.</p>
+    </div>
+  )
+}
+
+function ResultSummary({ evidence, input, studyId }: { evidence: NormalizedEvidence; input: StudyDesignInput; studyId: string }) {
+  const status = String(evidence.decision.status ?? evidence.decision.recommendation ?? "complete")
+  const estimate = numberValue(evidence.effect.estimate)
+  const passed = evidence.diagnostics.filter((item) => item.status === "pass").length
+  const blocking = evidence.diagnostics.filter((item) => item.status === "fail").length
+  return (
+    <div className="mt-4 border-y border-border py-4">
+      <p className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">Decision</p>
+      <p className="mt-1 text-lg font-semibold capitalize">{status.replaceAll("_", " ")}</p>
+      <table className="mt-3 w-full border-collapse text-left text-xs"><thead className="border-y border-border text-muted-foreground"><tr><th className="py-2 font-medium">Estimate</th><th className="py-2 font-medium">Diagnostics</th><th className="py-2 font-medium">Report</th></tr></thead><tbody><tr><td className="py-2.5 tabular-nums">{estimate === null ? "—" : formatEffect(estimate, input.metric_type)}</td><td className="py-2.5 tabular-nums">{passed} pass · {blocking} block</td><td className="py-2.5">{studyId && <Link className="underline decoration-border underline-offset-4 hover:decoration-foreground" href={`/studies/${studyId}`}>Open interactive report</Link>}</td></tr></tbody></table>
+    </div>
+  )
+}
+
+function SummaryMetric({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return <div className="min-w-0"><p className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">{label}</p><p className={cn("mt-1.5 truncate text-xs font-semibold", mono && "tabular-nums")}>{value}</p></div>
+}
+
+function ActivityIcon({ kind, status }: { kind: ActivityKind; status: ActivityStatus }) {
+  const Icon = kind === "python" ? SquareTerminal : kind === "api" ? Braces : kind === "storage" ? Database : kind === "file" ? FileCheck2 : Wrench
+  return <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-md border", status === "error" ? "border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-900 dark:bg-rose-950/30" : status === "running" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300" : "border-border bg-card text-muted-foreground")}><Icon className={cn("h-3.5 w-3.5", status === "running" && "animate-pulse")} /></span>
+}
+
+function initialMessages(requestedTemplate: string, hasTemplate: boolean): ChatMessage[] {
+  if (hasTemplate) {
+    const template = STUDY_TEMPLATES.find((item) => item.id === requestedTemplate)
+    return [{ id: "agent-intro", role: "agent", text: `I loaded the ${template?.label ?? "study"} template. Review the draft assumptions, then freeze the design or request a change.`, kind: "review" }]
+  }
+  return [openingMessage()]
+}
+
+function initialCapturedFields(input: StudyDesignInput, hasTemplate: boolean, requestedMode: string | null): AgentDraftField[] {
+  if (hasTemplate) return Object.keys(toAgentDraft(input)) as AgentDraftField[]
+  if (requestedMode === "prospective" || requestedMode === "retrospective") return ["mode"]
+  return []
+}
+
+function repliesFor(stage: ConversationStage, file: File | null, mappingReady: boolean): string[] {
+  switch (stage) {
+    case "review": return ["Freeze this design", "Change an answer", "Restart intake"]
+    case "data": return ["Attach dataset"]
+    case "mapping": return file ? [...(mappingReady ? ["Confirm mapping"] : []), "Upload another file"] : ["Attach dataset"]
+    case "cleaning": return ["Upload another file"]
+    case "lineage": return ["Confirm no unrecorded cleaning", "Upload another file"]
+    default: return []
+  }
+}
+
+function placeholderFor(stage: ConversationStage): string {
+  if (stage === "data" || stage === "mapping") return "Attach a dataset or describe the column mapping…"
+  if (stage === "cleaning") return "Review the cleaning plan above or attach another dataset…"
+  if (stage === "freezing") return "Agent is freezing the design…"
+  if (stage === "analysis") return "Agent is running diagnostics and estimation…"
+  if (stage === "complete") return "Run complete — open the evidence record or start a new conversation"
+  return "Reply to the Agent…"
+}
+
+function traceActivities(trace: AgentTraceStep[], prefix: string): ActivityEvent[] {
+  return trace.map((item, index) => {
+    const token = `${item.step} ${item.tool ?? ""}`.toLowerCase()
+    const kind: ActivityKind = token.includes("estimator") || token.includes("diagnostic") || token.includes("design") ? "python" : token.includes("contract") || token.includes("decision") ? "tool" : token.includes("data") ? "storage" : "tool"
+    return { id: `${prefix}-trace-${index}`, kind, label: item.step, detail: item.summary, status: "done" }
+  })
+}
+
+function normalizeRestoredConversation(
+  messages: ChatMessage[],
+  activities: ActivityEvent[],
+): { messages: ChatMessage[]; activities: ActivityEvent[] } {
+  const skippedActivityIds = new Set(
+    activities
+      .filter((activity) => activity.id.startsWith("api-analysis-") && activity.id.includes("-trace-") && DESIGN_TRACE_STEPS.has(activity.label))
+      .map((activity) => activity.id),
+  )
+  const normalizedActivities = activities.filter((activity) => !skippedActivityIds.has(activity.id))
+  const activityById = new Map(normalizedActivities.map((activity) => [activity.id, activity]))
+  const normalizedMessages: ChatMessage[] = []
+
+  messages.forEach((sourceMessage, index) => {
+    if (sourceMessage.activityId && skippedActivityIds.has(sourceMessage.activityId)) return
+    const message = sourceMessage.role === "user" && sourceMessage.text.startsWith("Form response")
+      ? {
+          ...sourceMessage,
+          text: sourceMessage.text.replace(/护栏指标\s*[（(]JSON\s*数组或[“"]无[”"][）)]/gu, "护栏指标"),
+        }
+      : sourceMessage
+    normalizedMessages.push(message)
+
+    if (!message.activityId) return
+    const activity = activityById.get(message.activityId)
+    const narration = activity ? TRACE_NARRATION[activity.label] : undefined
+    if (!narration) return
+    const nextMessage = messages[index + 1]
+    if (nextMessage?.role === "agent" && nextMessage.text === narration) return
+    normalizedMessages.push({
+      id: `${message.id}-narration`,
+      role: "agent",
+      text: narration,
+    })
+  })
+
+  return { messages: normalizedMessages, activities: normalizedActivities }
+}
+
+function numericSuffix(id: string): number {
+  const match = id.match(/-(\d+)$/)
+  return match ? Number(match[1]) : 0
+}
+
+function activitySequence(id: string): number {
+  const match = id.match(/^(?:agent|file|api-design|api-analysis)-(\d+)$/)
+  return match ? Number(match[1]) : 0
+}
+
+function emptyConversationSnapshot(): ConversationSnapshot {
+  const input = cloneTemplate("")
+  return {
+    version: 1,
+    input,
+    captured_fields: [],
+    stage: "intake",
+    messages: [openingMessage()],
+    active_form_message_id: OPENING_MESSAGE_ID,
+    activities: [],
+    artifact: null,
+    mapping: defaultMapping(input),
+    custom_title: null,
+  }
+}
+
+function emptyCheckpoint(): ConversationCheckpoint {
+  const snapshot = emptyConversationSnapshot()
+  return {
+    input: snapshot.input,
+    capturedFields: [],
+    stage: "intake",
+    activeFormMessageId: OPENING_MESSAGE_ID,
+    activitiesLength: 0,
+    artifact: null,
+    mapping: snapshot.mapping,
+  }
+}
+
+function conversationTitle(input: StudyDesignInput, messages: ChatMessage[]): string {
+  const firstUserMessage = messages.find((message) => message.role === "user" && message.kind !== "attachment" && message.text.trim())
+  const candidate = input.name.trim() || input.business_question.trim() || firstUserMessage?.text.trim() || "New conversation"
+  return candidate.length > 72 ? `${candidate.slice(0, 69).trimEnd()}…` : candidate
+}
+
+function upsertConversationSummary(current: ConversationSummary[], conversation: ConversationSummary): ConversationSummary[] {
+  const existingIndex = current.findIndex((item) => item.id === conversation.id)
+  if (existingIndex < 0) return [conversation, ...current]
+  return current.map((item, index) => index === existingIndex ? conversation : item)
+}
+
+function parseCsvHeader(line: string): string[] {
+  const matches = line.match(/(?:^|,)("(?:[^"]|"")*"|[^,]*)/g) ?? []
+  return matches.map((value) => value.replace(/^,/, "").replace(/^"|"$/g, "").replaceAll('""', '"').trim()).filter(Boolean)
+}
+
+const NUMERIC_AGENT_FIELDS = new Set<AgentDraftField>([
+  "success_threshold",
+  "allocation_treatment",
+  "baseline_rate",
+  "outcome_standard_deviation",
+  "traffic_per_day",
+  "metric_window_days",
+  "cuped_expected_correlation",
+  "minimum_pre_periods",
+])
+
+function formSubmissionDraft(submission: AgentFormSubmission): { patch: AgentDraft; captured: AgentDraftField[] } {
+  const patch: Record<string, unknown> = {}
+  const captured: AgentDraftField[] = []
+
+  for (const [field, rawValue] of Object.entries(submission.values) as Array<[AgentDraftField, string | string[] | undefined]>) {
+    if (rawValue === undefined) continue
+    if (field === "guardrails") {
+      const text = Array.isArray(rawValue) ? rawValue.join(", ") : rawValue
+      if (/^(none|no guardrails?|无|没有|不需要)$/i.test(text.trim())) {
+        patch[field] = []
+        captured.push(field)
+      }
+      continue
+    }
+    if (Array.isArray(rawValue) || !rawValue.trim()) continue
+    if (NUMERIC_AGENT_FIELDS.has(field)) {
+      const numericValue = Number(rawValue)
+      if (!Number.isFinite(numericValue)) continue
+      patch[field] = numericValue
+    } else {
+      patch[field] = rawValue.trim()
+    }
+    captured.push(field)
+  }
+
+  return { patch: patch as AgentDraft, captured }
+}
+
+
+function mergeAgentPatch(input: StudyDesignInput, patch: AgentDraft): StudyDesignInput {
+  return {
+    ...input,
+    ...patch,
+    mde: patch.success_threshold ?? input.mde,
+  }
+}
+
+function formatEffect(value: number, metricType: StudyDesignInput["metric_type"]): string {
+  return metricType === "binary" ? `${(value * 100).toFixed(2)} pp` : value.toLocaleString(undefined, { maximumFractionDigits: 3 })
+}
+
+function formatMinimumEffect(
+  value: number,
+  metricType: StudyDesignInput["metric_type"],
+  direction: StudyDesignInput["primary_direction"],
+): string {
+  return `${direction === "decrease" ? "↓" : "↑"} ${formatEffect(value, metricType)}`
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value)
+  return null
+}
+
+function mergeArtifacts(base: StudyRecord, result: StudyRecord, detail: StudyRecord | null): StudyRecord {
+  return {
+    ...base,
+    ...result,
+    ...(detail ?? {}),
+    contract: detail?.contract ?? result.contract ?? base.contract,
+    causal_contract: detail?.causal_contract ?? result.causal_contract ?? base.causal_contract,
+    design: detail?.design ?? result.design ?? base.design,
+    design_spec: detail?.design_spec ?? result.design_spec ?? base.design_spec,
+    data_contract: detail?.data_contract ?? result.data_contract ?? base.data_contract,
+    trace: detail?.trace ?? result.trace ?? base.trace,
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong. Please retry."
+}
+
+function isFailedToFetchError(error: unknown): boolean {
+  return error instanceof Error && error.message === "Failed to fetch"
+}
+
+function waitForAgentRetry(): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, 600))
+}
+
+function waitForWorkflowStep(delay = 180): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, delay))
+}

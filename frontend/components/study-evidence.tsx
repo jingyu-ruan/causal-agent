@@ -34,6 +34,7 @@ export type NormalizedEvidence = {
   decision: UnknownRecord
   memo: string
   trace: AgentTraceStep[]
+  eventStudy: UnknownRecord[]
   dataset: UnknownRecord
 }
 
@@ -84,6 +85,7 @@ export function normalizeEvidence(payload: StudyRecord): NormalizedEvidence {
   const decision = pickRecord(study.decision, result.decision)
   const memoValue = study.decision_memo ?? result.decision_memo ?? decision.summary
   const traceValue = study.trace ?? result.trace
+  const eventStudyValue = study.event_study ?? result.event_study
 
   return {
     study,
@@ -96,6 +98,7 @@ export function normalizeEvidence(payload: StudyRecord): NormalizedEvidence {
     dimensionAnalyses: asArray(study.dimension_analyses ?? result.dimension_analyses).map(asRecord),
     decision,
     memo: typeof memoValue === "string" ? memoValue : "",
+    eventStudy: asArray(eventStudyValue).map(asRecord),
     trace: asArray(traceValue).map((item, index) => {
       const record = asRecord(item)
       return {
@@ -150,7 +153,7 @@ export function ContractEvidence({ evidence }: { evidence: NormalizedEvidence })
           <div className="eyebrow">
             <Fingerprint className="h-4 w-4" /> Causal contract
           </div>
-          <CardTitle className="text-xl font-extrabold">{String(contract.business_question ?? evidence.study.name ?? "Decision question")}</CardTitle>
+          <CardTitle className="text-xl font-semibold">{String(contract.business_question ?? evidence.study.name ?? "Decision question")}</CardTitle>
           <CardDescription>Frozen definitions keep the analysis aligned with the decision.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -169,7 +172,7 @@ export function ContractEvidence({ evidence }: { evidence: NormalizedEvidence })
         <CardHeader className="border-b border-slate-900/[0.07] bg-slate-900/[0.035] p-6 dark:border-white/10 dark:bg-white/[0.035]">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-600"><Route className="h-4 w-4" /> Design spec</div>
+              <div className="flex items-center gap-2 text-xs font-semibold normal-case tracking-normal text-amber-600"><Route className="h-4 w-4" /> Design spec</div>
               <CardTitle className="mt-3 text-lg">{formatDesignType(designType)}</CardTitle>
             </div>
             {Boolean(design.is_frozen ?? true) && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Frozen</span>}
@@ -177,7 +180,7 @@ export function ContractEvidence({ evidence }: { evidence: NormalizedEvidence })
         </CardHeader>
         <CardContent className="p-6">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{isDid ? "Treatment start" : "Required sample"}</p>
+            <p className="text-[11px] font-semibold normal-case tracking-normal text-slate-400">{isDid ? "Treatment start" : "Required sample"}</p>
             <p className="metric-number mt-1 text-3xl font-semibold">{isDid ? String(design.treatment_start ?? "—") : requiredSample === null ? "—" : Math.round(requiredSample).toLocaleString()}</p>
             <p className="mt-1 text-xs text-slate-500">{isDid ? "pre-committed intervention boundary" : "total analysis units"}</p>
           </div>
@@ -210,7 +213,7 @@ export function DataContractEvidence({ evidence }: { evidence: NormalizedEvidenc
       </CardHeader>
       <CardContent>
         <div className="overflow-hidden rounded-xl border border-slate-900/10 dark:border-white/10">
-          <div className="grid grid-cols-[1fr_0.8fr_auto] gap-4 bg-slate-900/[0.04] px-4 py-2.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-muted-foreground dark:bg-white/[0.04]">
+          <div className="grid grid-cols-[1fr_0.8fr_auto] gap-4 bg-slate-900/[0.04] px-4 py-2.5 tabular-nums text-[11px] font-semibold normal-case tracking-normal text-muted-foreground dark:bg-white/[0.04]">
             <span>Logical field</span><span>Role / type</span><span>Required</span>
           </div>
           {renderedFields.map((field, index) => {
@@ -263,8 +266,8 @@ export function DiagnosticsEvidence({ evidence }: { evidence: NormalizedEvidence
         <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><FileCode2 className="h-4 w-4 text-slate-500" /> Run summary</CardTitle><CardDescription>Diagnostic counts and the immutable dataset version used by this run.</CardDescription></CardHeader>
         <CardContent>
           <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
-            <div><p className="font-mono text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Passed</p><p className="metric-number mt-1 text-3xl font-semibold text-emerald-700 dark:text-emerald-300">{passed}</p></div>
-            <div><p className="font-mono text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Blocking</p><p className={cn("metric-number mt-1 text-3xl font-semibold", blocking > 0 ? "text-rose-600" : "text-muted-foreground/45")}>{blocking}</p></div>
+            <div><p className="tabular-nums text-[11px] font-semibold normal-case tracking-normal text-muted-foreground">Passed</p><p className="metric-number mt-1 text-3xl font-semibold text-emerald-700 dark:text-emerald-300">{passed}</p></div>
+            <div><p className="tabular-nums text-[11px] font-semibold normal-case tracking-normal text-muted-foreground">Blocking</p><p className={cn("metric-number mt-1 text-3xl font-semibold", blocking > 0 ? "text-rose-600" : "text-muted-foreground/45")}>{blocking}</p></div>
           </div>
           <div className="mt-6 border-t border-slate-900/[0.07] pt-2 dark:border-white/10">
             <EvidenceRows items={[
@@ -301,7 +304,7 @@ export function DecisionEvidence({ evidence }: { evidence: NormalizedEvidence })
             ) : (
               <>
                 <p className="metric-number text-4xl font-semibold">{formatEffect(effect.estimate, metricKind)}</p>
-                <p className="mt-2 font-mono text-xs text-slate-500">95% CI {formatInterval(effect.ci_lower, effect.ci_upper, metricKind)}</p>
+                <p className="mt-2 tabular-nums text-xs text-slate-500">95% CI {formatInterval(effect.ci_lower, effect.ci_upper, metricKind)}</p>
                 <div className="mt-6 border-t border-slate-900/[0.07] pt-2 dark:border-white/10">
                   <EvidenceRows items={[
                     { label: "Control", value: formatMetricLevel(control, metricKind), mono: true },
@@ -325,7 +328,7 @@ export function DecisionEvidence({ evidence }: { evidence: NormalizedEvidence })
             {guardrailEffects.map((guardrail, index) => (
               <div key={`${String(guardrail.metric ?? guardrail.name)}-${index}`} className="rounded-xl border border-slate-900/10 p-4 dark:border-white/10">
                 <p className="text-xs font-semibold">{String(guardrail.metric_name ?? guardrail.metric ?? guardrail.name ?? `Guardrail ${index + 1}`)}</p>
-                <p className="mt-2 font-mono text-lg font-semibold">{formatEffect(guardrail.effect ?? guardrail.estimate, String(guardrail.metric_kind ?? guardrail.kind ?? "continuous"))}</p>
+                <p className="mt-2 tabular-nums text-lg font-semibold">{formatEffect(guardrail.effect ?? guardrail.estimate, String(guardrail.metric_kind ?? guardrail.kind ?? "continuous"))}</p>
                 <p className="mt-1 text-xs text-slate-500">CI {formatInterval(guardrail.ci_lower, guardrail.ci_upper, String(guardrail.metric_kind ?? guardrail.kind ?? "continuous"))}</p>
               </div>
             ))}
@@ -354,8 +357,8 @@ export function TraceEvidence({ evidence }: { evidence: NormalizedEvidence }) {
                 <span className="absolute -left-[7px] top-0 grid h-3.5 w-3.5 place-items-center rounded-full border-2 border-white bg-slate-500 dark:border-[#1b1e24]" />
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-semibold capitalize">{item.step.replaceAll("_", " ")}</p>
-                  {item.tool && <code className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-slate-900">{item.tool}</code>}
-                  {item.status && <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">{item.status}</span>}
+                  {item.tool && <code className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500 dark:bg-slate-900">{item.tool}</code>}
+                  {item.status && <span className="text-[11px] font-semibold normal-case tracking-normal text-emerald-600">{item.status}</span>}
                 </div>
                 {item.summary && <p className="mt-1 text-xs leading-5 text-slate-500">{item.summary}</p>}
               </li>
@@ -405,7 +408,7 @@ function DecisionMemo({ status, decision, memo }: { status: string; decision: Un
     <Card className={cn("border shadow-none", tone)}>
       <CardHeader>
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em]"><Icon className="h-4 w-4" /> Decision memo</div>
+          <div className="flex items-center gap-2 text-xs font-semibold normal-case tracking-normal"><Icon className="h-4 w-4" /> Decision memo</div>
           <span className="rounded-full bg-white/60 px-2.5 py-1 text-[11px] font-semibold dark:bg-black/20">Policy evaluated</span>
         </div>
         <CardTitle className="text-2xl">{label}</CardTitle>
@@ -422,7 +425,7 @@ function DecisionMemo({ status, decision, memo }: { status: string; decision: Un
 }
 
 function MemoList({ label, values }: { label: string; values: unknown[] }) {
-  return <div><p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">{label}</p><ul className="mt-2 space-y-1.5">{values.map((value, index) => <li key={index} className="flex gap-2"><span aria-hidden>•</span><span>{typeof value === "string" ? value : JSON.stringify(value)}</span></li>)}</ul></div>
+  return <div><p className="text-[11px] font-semibold normal-case tracking-normal opacity-60">{label}</p><ul className="mt-2 space-y-1.5">{values.map((value, index) => <li key={index} className="flex gap-2"><span aria-hidden>•</span><span>{typeof value === "string" ? value : JSON.stringify(value)}</span></li>)}</ul></div>
 }
 
 function EmptyEvidence({ icon: Icon, title, description }: { icon: typeof CircleDashed; title: string; description: string }) {
@@ -431,7 +434,7 @@ function EmptyEvidence({ icon: Icon, title, description }: { icon: typeof Circle
 
 function EvidenceField({ label, value, mono = false }: { label: string; value: unknown; mono?: boolean }) {
   const display = value === undefined || value === null || value === "" ? "—" : typeof value === "object" ? JSON.stringify(value) : String(value)
-  return <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p><p className={cn("mt-1.5 break-words text-sm text-slate-700 dark:text-slate-200", mono && "font-mono text-xs")}>{display}</p></div>
+  return <div className="min-w-0"><p className="text-[11px] font-semibold normal-case tracking-normal text-slate-400">{label}</p><p className={cn("mt-1.5 break-words text-sm text-slate-700 dark:text-slate-200", mono && "tabular-nums text-xs")}>{display}</p></div>
 }
 
 type EvidenceItem = { label: string; value: unknown; mono?: boolean }

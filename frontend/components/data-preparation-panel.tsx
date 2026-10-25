@@ -44,14 +44,14 @@ export function DataPreparationPanel({
           <h2 id="data-preparation-title" className="text-base font-semibold">Data preparation</h2>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">{profile.agent_summary}</p>
         </div>
-        <code className="text-[10px] text-muted-foreground">{profile.source_sha256.slice(0, 10)}…</code>
+        <code className="text-[11px] text-muted-foreground">{profile.source_sha256.slice(0, 10)}…</code>
       </div>
 
       <table className="mt-4 w-full border-collapse text-left text-xs">
         <thead className="border-y border-border text-muted-foreground">
           <tr><th className="py-2 pr-4 font-medium">Rows</th><th className="py-2 pr-4 font-medium">Columns</th><th className="py-2 pr-4 font-medium">Exact duplicates</th><th className="py-2 font-medium">Grain conflicts</th></tr>
         </thead>
-        <tbody><tr><td className="py-2.5 pr-4 font-mono">{profile.row_count.toLocaleString()}</td><td className="py-2.5 pr-4 font-mono">{profile.column_count}</td><td className="py-2.5 pr-4 font-mono">{profile.exact_duplicate_rows}</td><td className="py-2.5 font-mono">{profile.duplicate_grain_rows}</td></tr></tbody>
+        <tbody><tr><td className="py-2.5 pr-4 tabular-nums">{profile.row_count.toLocaleString()}</td><td className="py-2.5 pr-4 tabular-nums">{profile.column_count}</td><td className="py-2.5 pr-4 tabular-nums">{profile.exact_duplicate_rows}</td><td className="py-2.5 tabular-nums">{profile.duplicate_grain_rows}</td></tr></tbody>
       </table>
 
       {blocked && (
@@ -69,9 +69,9 @@ export function DataPreparationPanel({
           <div className="mt-2 divide-y divide-border border-y border-border">
             {profile.operations.map((operation) => (
               <label key={operation.id} className="grid cursor-pointer grid-cols-[auto_1fr_auto] gap-3 py-3 text-xs">
-                <Checkbox checked={selectedOperationIds.includes(operation.id)} onCheckedChange={(checked) => onToggleOperation(operation.id, checked === true)} className="mt-0.5" />
+                <Checkbox disabled={busy} checked={selectedOperationIds.includes(operation.id)} onCheckedChange={(checked) => onToggleOperation(operation.id, checked === true)} className="mt-0.5" />
                 <span><span className="block font-medium">{OPERATION_LABELS[operation.operation] ?? operation.operation}</span><span className="mt-1 block leading-5 text-muted-foreground">{operation.reason}</span></span>
-                <span className="font-mono text-muted-foreground">{operation.affected_rows} row{operation.affected_rows === 1 ? "" : "s"}</span>
+                <span className="tabular-nums text-muted-foreground">{operation.affected_rows} row{operation.affected_rows === 1 ? "" : "s"}</span>
               </label>
             ))}
           </div>
@@ -83,14 +83,14 @@ export function DataPreparationPanel({
         {profile.suggested_dimensions.length === 0 ? <p className="mt-2 text-xs text-muted-foreground">No stable low-cardinality dimension was detected automatically.</p> : (
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
             {profile.suggested_dimensions.map((dimension) => (
-              <label key={dimension} className="flex cursor-pointer items-center gap-2 text-xs"><Checkbox checked={selectedDimensions.includes(dimension)} onCheckedChange={(checked) => onToggleDimension(dimension, checked === true)} /><code>{dimension}</code></label>
+              <label key={dimension} className="flex cursor-pointer items-center gap-2 text-xs"><Checkbox disabled={busy} checked={selectedDimensions.includes(dimension)} onCheckedChange={(checked) => onToggleDimension(dimension, checked === true)} /><code>{dimension}</code></label>
             ))}
           </div>
         )}
       </div>
 
       <label className="mt-5 flex cursor-pointer items-start gap-3 border-t border-border pt-4 text-xs leading-5">
-        <Checkbox checked={lineageConfirmed} onCheckedChange={(checked) => onLineageConfirmed(checked === true)} className="mt-0.5" />
+        <Checkbox disabled={busy} checked={lineageConfirmed} onCheckedChange={(checked) => onLineageConfirmed(checked === true)} className="mt-0.5" />
         <span>I confirm there is no unrecorded outcome-dependent cleaning, deletion, imputation, or window change upstream. The selected operations may run on a copy of this upload.</span>
       </label>
 

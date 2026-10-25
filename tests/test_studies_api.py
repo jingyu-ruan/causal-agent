@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 from collections.abc import Generator
 
@@ -78,6 +79,58 @@ def test_design_freezes_contract_and_planning_fields(client: TestClient) -> None
     assert study["design_spec"]["is_frozen"] is True
     assert study["required_sample_size"] > 0
     assert study["estimated_duration_days"] > 0
+
+
+def test_synthetic_dataset_uses_the_frozen_rct_contract(client: TestClient) -> None:
+    created = client.post("/api/studies/design", json=_rct_payload())
+    assert created.status_code == 200, created.text
+
+    response = client.post(
+        f"/api/studies/{created.json()['id']}/synthetic-data",
+        json={"baseline_value": 0.20},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/csv")
+    assert response.headers["x-synthetic-source"] == "frozen-design-contract"
+    frame = pd.read_csv(io.StringIO(response.text))
+    assert {"user_id", "treatment", "activation"}.issubset(frame.columns)
+    assert set(frame["treatment"]) == {"control", "treatment"}
+    assert len(frame) == created.json()["required_sample_size"]
+
+
+def test_synthetic_dataset_uses_the_frozen_did_contract(client: TestClient) -> None:
+    design = {
+        "title": "Regional rollout synthetic demo",
+        "business_question": "Did the regional rollout improve the target outcome?",
+        "hypothesis": "The rollout improves the target outcome after launch.",
+        "design_type": "difference_in_differences",
+        "population": "Eligible regions",
+        "unit": "region_id",
+        "intervention": "New rollout",
+        "comparator": "Business as usual",
+        "primary_metric": {
+            "name": "outcome",
+            "kind": "continuous",
+            "direction": "higher_is_better",
+            "minimum_effect": 1.0,
+        },
+        "estimand": "att",
+        "observation_window_days": 7,
+        "treatment_start": 5,
+        "minimum_pre_periods": 3,
+    }
+    created = client.post("/api/studies/design", json=design)
+    assert created.status_code == 200, created.text
+
+    response = client.post(f"/api/studies/{created.json()['id']}/synthetic-data", json={})
+
+    assert response.status_code == 200, response.text
+    frame = pd.read_csv(io.StringIO(response.text))
+    assert {"region_id", "treatment", "time", "outcome"}.issubset(frame.columns)
+    assert frame["region_id"].nunique() == 40
+    assert frame["time"].nunique() == 8
+    assert set(frame["treatment"]) == {"control", "treatment"}
 
 
 def test_uploaded_analysis_is_persisted_with_provenance(client: TestClient) -> None:
@@ -250,6 +303,56 @@ def test_did_rejects_rct_only_fields_instead_of_ignoring_them(client: TestClient
 
     assert response.status_code == 422
     assert "RCT-only fields are not valid" in response.text
+
+
+def test_verified_demo_exposes_dimensions_for_the_interactive_report(client: TestClient) -> None:
+    response = client.get("/api/studies/demo/rct")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    analyses = payload["analysis"]["dimension_analyses"]
+
+    assert payload["decision"]["status"] == "go"
+    assert {item["dimension"] for item in analyses} == {"audience", "platform"}
+    assert all(len(item["subgroups"]) >= 3 for item in analyses)
+    assert all(item["consistency"] is not None for item in analyses)
+
+
+@pytest.mark.parametrize(
+    ("scenario", "status"),
+    [
+        ("hold", "hold"),
+        ("insufficient_evidence", "insufficient_evidence"),
+    ],
+)
+def test_verified_rct_demo_gallery_covers_non_go_decisions(
+    client: TestClient,
+    scenario: str,
+    status: str,
+) -> None:
+    response = client.get(f"/api/studies/demo/rct/{scenario}")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["decision"]["status"] == status
+    if scenario == "hold":
+        assert payload["effect"]["estimate"] is not None
+        assert payload["analysis"]["dimension_analyses"]
+    else:
+        assert payload["effect"] is None
+        assert "unit_grain" in payload["decision"]["blocking_diagnostics"]
+
+
+def test_verified_did_demo_exposes_event_study_for_method_showcase(client: TestClient) -> None:
+    response = client.get("/api/studies/demo/did")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["decision"]["status"] == "go"
+    assert payload["design_spec"]["design_type"] == "difference_in_differences"
+    assert len(payload["analysis"]["event_study"]) == 10
+    assert sum(point["is_reference"] for point in payload["analysis"]["event_study"]) == 1
+    assert any(item["code"] == "parallel_trends" for item in payload["analysis"]["diagnostics"])
 
 
 def test_did_design_and_uploaded_panel_complete_the_api_lifecycle(client: TestClient) -> None:

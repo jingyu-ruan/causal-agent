@@ -41,8 +41,11 @@ and full lifecycle.
 | Difference-in-Differences | ATT contract, intervention boundary, minimum pre-periods, data grain, guardrails | confirmed cleaning, unit/time fixed effects, unit-clustered uncertainty, event study, joint pre-trend gate, stable-dimension drilldowns, frozen decision rules |
 
 Study analysis accepts CSV or Parquet files. Required columns are declared before
-upload. A metadata-only profile proposes allow-listed cleaning operations, and the
-user must confirm each plan before deterministic code applies it to a working copy.
+upload. After a design is frozen, Synthetic data can create a deterministic,
+contract-compatible CSV from the entered planning context for a fast demo; it then
+follows the same profile, cleaning confirmation, and analysis path as an upload.
+A metadata-only profile proposes allow-listed cleaning operations, and the user must
+confirm each plan before deterministic code applies it to a working copy.
 Primary outcomes are never imputed, raw uploads remain unchanged, and non-identical
 duplicate grain or other unresolved identification problems still block analysis.
 
@@ -113,17 +116,66 @@ NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
 Open [http://localhost:3000](http://localhost:3000). The verified RCT path is
 also available through `GET /api/studies/demo/rct`.
 
+### Live demonstration
+
+The interface is organized as a general causal research workspace.
+Open `/studies/replay` for a live,
+model-independent demonstration:
+
+1. Select **Randomized A/B** or **Difference-in-differences** and review the
+   prefilled research question, hypothesis, and assumptions.
+2. Select **Load demo data**. The application freezes a real design, generates a
+   reproducible CSV, and profiles the dataset. The actual rows can be previewed
+   and downloaded.
+3. Review the preparation plan, select drilldown dimensions, and confirm the
+   recorded lineage. Select **Confirm plan and analyze**.
+4. Inspect the saved evidence report, including diagnostics, effect estimates,
+   confidence intervals, and, for DiD, the event study and pre-trend checks.
+
+The study library also offers fixed reference cases for **Go**, **Hold**, and
+**Insufficient evidence**. Their numerical results and decisions are calculated
+by the Python service. A custom conversation can start at `/studies/new`; sample
+study templates can proceed to frozen design and demo data without a model key.
+
+### Sites deployment
+
+The Sites deployment source lives in `sites/`. The canonical interface is
+`frontend/`; run `python scripts/sync_sites_frontend.py` after changing its
+application code. This preserves the Sites Worker and hosting identity.
+
+The Sites Worker serves the Vinext frontend and proxies same-origin `/backend`
+requests to `https://causal-agent.onrender.com`. It forwards only the content type
+and dedicated workspace/model headers. Site authentication cookies stay at the
+Site boundary. The compatibility adapter generates fixed-seed synthetic CSVs and
+reference-study inputs because the current Python deployment lacks these new
+endpoints. All profiling, cleaning, estimation, diagnostic gates, and decisions
+continue to execute through the Python service. Studies and conversations use
+that service's configured database.
+
+The synthetic-data adapter tests run with `node --test sites/tests/*.test.mjs`.
+Build the Site with the Sites plugin's `build-site.mjs` helper; publishing uses
+its source synchronization and archive workflow. The project identity is in
+`sites/.openai/hosting.json`.
+
 ### DeepSeek study Agent
 
-Opening `/studies/new` without a configured key shows a DeepSeek setup dialog.
+Opening `/studies/new` offers sample studies and a guided demonstration.
+Use **Configure model** to open the model setup dialog for a custom conversation.
+Select **OpenRouter Free** to use `openrouter/free`, which chooses a free model for each
+request. The browser sends that key only to the fixed OpenRouter API origin, with
+zero-price provider limits. Returned forms and draft values pass runtime validation;
+the Python service validates the final frozen design and performs all causal calculations.
+The **Test connection** button sends a synthetic intake question and verifies the
+returned form without creating a study. Free models have request limits.
 The same controls are available from `/settings`. The default model is
 `deepseek-v4-pro`; `deepseek-v4-flash` is available as a lower-latency option.
 
 By default, the key is stored only in browser session storage. Selecting
-**Remember on this device** opts into browser local storage. The key is sent only
-in the dedicated Agent request header, is not written to the study database, and
-the backend fixes the provider host to `https://api.deepseek.com` rather than
-accepting an arbitrary URL.
+**Remember on this device** opts into browser local storage. For DeepSeek models, the key is sent only in the dedicated Agent request header
+and the backend fixes the provider host to `https://api.deepseek.com`. OpenRouter
+requests go directly from the browser to `https://openrouter.ai/api/v1/chat/completions`.
+Neither provider key is written to the study database. Model selection and key-prefix
+checks prevent sending OpenRouter keys to the DeepSeek service.
 
 The backend can also use `DEEPSEEK_API_KEY` for direct API clients. Browser users
 still configure their personal key through the dialog or Settings page.
@@ -187,6 +239,8 @@ initialization.
 | `GET /api/studies/{id}/artifact` | download the frozen design JSON |
 | `GET /api/studies/{id}/memo` | download the deterministic decision memo |
 | `GET /api/studies/demo/rct` | run or retrieve the deterministic verified demo |
+| `GET /api/studies/demo/rct/{scenario}` | retrieve the Hold or Insufficient evidence RCT scenario |
+| `GET /api/studies/demo/did` | run or retrieve the deterministic DiD event-study demo |
 | `GET /health` | process liveness |
 | `GET /ready` | initialization and database readiness |
 

@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react"
-import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import Link from "@/components/page-link"
+import { useSearchParams } from "next/navigation"
 import { useTheme } from "next-themes"
 import {
   AlertCircle,
@@ -11,6 +11,9 @@ import {
   CheckCircle2,
   Copy,
   Database,
+  ArrowUpRight,
+  ArrowRight,
+  FlaskConical,
   FileCheck2,
   FileSpreadsheet,
   KeyRound,
@@ -33,6 +36,7 @@ import { AgentFormCard } from "@/components/agent-form-card"
 import { AgentSettingsDialog } from "@/components/agent-settings"
 import { useBackendReadiness } from "@/components/backend-readiness"
 import { ConversationHistorySidebar } from "@/components/conversation-history-sidebar"
+import { CausalMark } from "@/components/causal-mark"
 import { DataPreparationPanel } from "@/components/data-preparation-panel"
 import { normalizeEvidence, type NormalizedEvidence } from "@/components/study-evidence"
 import { Button } from "@/components/ui/button"
@@ -50,7 +54,7 @@ import {
 import {
   useAgentSettings,
   type AgentSettings,
-  type DeepSeekModel,
+  type AgentModel,
 } from "@/lib/agent-settings"
 import {
   createConversation,
@@ -61,8 +65,17 @@ import {
   type ConversationSummary,
 } from "@/lib/conversation-api"
 import {
+  defaultMapping,
+  mappingIssues,
+  mappingSummary,
+  parseMappingCorrections,
+  suggestMapping,
+  type ColumnMapping,
+} from "@/lib/column-mapping"
+import {
   analyzeStudy,
   createStudyDesign,
+  generateSyntheticDataset,
   getStudy,
   getStudyId,
   profileStudyDataset,
@@ -136,17 +149,8 @@ type AgentTurnPayload = {
   messages: AgentHistoryMessage[]
   draft: AgentDraft
   captured_fields: AgentDraftField[]
-  model: DeepSeekModel
+  model: AgentModel
   locale: string
-}
-
-type ColumnMapping = {
-  unit_col: string
-  treatment_col: string
-  time_col: string
-  metric_cols: Record<string, string>
-  covariate_cols: Record<string, string>
-  dimension_cols: string[]
 }
 
 type ConversationCheckpoint = {
@@ -174,38 +178,42 @@ type ConversationSnapshot = Record<string, unknown> & {
 
 const OPENING_MESSAGE_ID = "agent-opening"
 
+function normalizeCausalTerms(text: string): string {
+  return text.replaceAll("双差分", "双重差分")
+}
+
 function openingMessage(): ChatMessage {
   return {
     id: OPENING_MESSAGE_ID,
     role: "agent",
-    text: "先从研究问题和可检验假设开始。这两项会成为后续因果设计的固定起点。",
+    text: "Start with a research question and a testable hypothesis. These will guide the causal study.",
     blocks: [{
       type: "form",
       id: "study-question-and-hypothesis",
-      title: "研究问题与假设",
-      description: "请同时描述要支持的业务决策，以及为什么预期干预会改变结果。",
-      submit_label: "继续",
+      title: "Research question and hypothesis",
+      description: "Describe the decision to support and why the intervention may change the outcome.",
+      submit_label: "Continue",
       fields: [
         {
           id: "business_question",
-          label: "业务问题",
+          label: "Research question",
           control: "textarea",
           required: true,
-          placeholder: "例如：新版首页是否提升了用户次日留存率？",
-          helper_text: "清晰描述你希望评估的改变或决策。",
-          suggested_value: "新版首页是否能提升符合条件用户的次日留存率？",
-          suggestion_basis: "演示用参考回答；后续问题会基于你已经填写的内容生成。",
+          placeholder: "For example: Does guided onboarding improve seven-day activation?",
+          helper_text: "Describe the change or decision the study will evaluate.",
+          suggested_value: "Should guided onboarding roll out to all eligible new users?",
+          suggestion_basis: "A sample research question. Follow-up questions use your confirmed answers.",
           options: [],
         },
         {
           id: "hypothesis",
-          label: "研究假设",
+          label: "Working hypothesis",
           control: "textarea",
           required: true,
-          placeholder: "例如：新版首页使次日留存率提高 2 个百分点。",
-          helper_text: "写出预期的因果方向及其机制。",
-          suggested_value: "新版首页通过更清晰地呈现核心内容，使次日留存率至少提高 1 个百分点。",
-          suggestion_basis: "基于上面的业务问题生成的可检验假设。",
+          placeholder: "For example: Guided onboarding increases activation by 1 percentage point.",
+          helper_text: "State the expected causal direction and the mechanism.",
+          suggested_value: "Guided onboarding increases seven-day activation by helping new users reach first value faster.",
+          suggestion_basis: "A testable hypothesis based on the sample research question.",
           options: [],
         },
       ],
@@ -213,8 +221,42 @@ function openingMessage(): ChatMessage {
   }
 }
 
+const WORKFLOW_STEPS = [
+  { label: "Frame", detail: "Question" },
+  { label: "Contract", detail: "Freeze" },
+  { label: "Dataset", detail: "Map" },
+  { label: "Clean", detail: "Confirm" },
+  { label: "Decision", detail: "Report" },
+]
+
+function workflowStepIndex(stage: ConversationStage): number {
+  if (stage === "intake") return 0
+  if (stage === "review" || stage === "freezing") return 1
+  if (stage === "data" || stage === "mapping") return 2
+  if (stage === "cleaning") return 3
+  return 4
+}
+
+function WorkflowRail({ stage }: { stage: ConversationStage }) {
+  const current = workflowStepIndex(stage)
+  return (
+    <div className="mb-7 rounded-2xl border border-border bg-card/75 p-3 shadow-[0_12px_40px_-32px_rgba(15,23,42,0.65)]">
+      <div className="flex items-center justify-between gap-3 px-1">
+        <div><p className="tabular-nums text-[11px] font-semibold normal-case tracking-normal text-muted-foreground">Study flow</p><p className="mt-1 text-xs font-semibold">{WORKFLOW_STEPS[current].label} <span className="font-normal text-muted-foreground">{WORKFLOW_STEPS[current].detail}</span></p></div>
+        <span className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">{String(current + 1).padStart(2, "0")} / {String(WORKFLOW_STEPS.length).padStart(2, "0")}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-5 gap-1.5" aria-label="Study flow progress">
+        {WORKFLOW_STEPS.map((step, index) => {
+          const complete = index < current
+          const active = index === current
+          return <div key={step.label} className="min-w-0"><div className={cn("h-1 rounded-full transition-colors", complete ? "bg-slate-950 dark:bg-slate-100" : active ? "bg-blue-500" : "bg-muted")} /><div className={cn("mt-2 truncate text-[11px] font-semibold", active ? "text-foreground" : "text-muted-foreground")}>{step.label}</div></div>
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function StudyWorkbench() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const { resolvedTheme, setTheme } = useTheme()
   const readiness = useBackendReadiness()
@@ -235,7 +277,6 @@ export function StudyWorkbench() {
   const [activeFormMessageId, setActiveFormMessageId] = useState<string | null>(() => requestedConversationId || templateExists ? null : OPENING_MESSAGE_ID)
   const agentSettings = useAgentSettings()
   const [settingsRequested, setSettingsRequested] = useState(false)
-  const [settingsDismissed, setSettingsDismissed] = useState(false)
   const [draft, setDraft] = useState("")
   const [artifact, setArtifact] = useState<StudyRecord | null>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -268,9 +309,10 @@ export function StudyWorkbench() {
 
   const evidence = useMemo(() => artifact ? normalizeEvidence(artifact) : null, [artifact])
   const studyId = artifact ? getStudyId(artifact) : ""
-  const quickReplies = repliesFor(stage, file)
+  const mappingReady = mappingIssues(mapping, columns, input).length === 0
+  const quickReplies = repliesFor(stage, file, mappingReady)
   const agentApiConfigured = Boolean(agentSettings.apiKey.trim())
-  const settingsOpen = settingsRequested || (!agentApiConfigured && !settingsDismissed && conversationHydrated && !conversationLoading)
+  const settingsOpen = settingsRequested
 
   const makeSnapshot = (): ConversationSnapshot => ({
     version: 1,
@@ -322,7 +364,6 @@ export function StudyWorkbench() {
   }
 
   const openAgentSettings = () => {
-    setSettingsDismissed(false)
     setSettingsRequested(true)
   }
 
@@ -369,7 +410,7 @@ export function StudyWorkbench() {
           setConversations((current) => upsertConversationSummary(current, created))
           const params = new URLSearchParams(searchParams.toString())
           params.set("conversation", created.id)
-          router.replace(`/studies/new?${params.toString()}`, { scroll: false })
+          window.history.replaceState(window.history.state, "", `/studies/new?${params.toString()}`)
         }
         setConversationHydrated(true)
       } catch (caught) {
@@ -451,7 +492,7 @@ export function StudyWorkbench() {
 
   const appendAgent = (text: string, kind: MessageKind = "text", blocks: AgentFormBlock[] = []) => {
     const id = nextMessageId("agent")
-    setMessages((current) => [...current, { id, role: "agent", text, kind, blocks }])
+    setMessages((current) => [...current, { id, role: "agent", text: normalizeCausalTerms(text), kind, blocks }])
     setActiveFormMessageId(blocks.length ? id : null)
     return id
   }
@@ -490,7 +531,7 @@ export function StudyWorkbench() {
   ) => {
     if (!settings.apiKey.trim()) {
       openAgentSettings()
-      setError("Connect a DeepSeek API key before messaging the study Agent.")
+      setError("Connect an OpenRouter or DeepSeek API key before messaging the study Agent.")
       return
     }
 
@@ -619,7 +660,7 @@ export function StudyWorkbench() {
       restoreSnapshot(created.state)
       setConversationId(created.id)
       setConversations((current) => upsertConversationSummary(current, created))
-      router.push(`/studies/new?conversation=${encodeURIComponent(created.id)}`, { scroll: false })
+      window.location.assign(`/studies/new?conversation=${encodeURIComponent(created.id)}`)
       setConversationHydrated(true)
     } catch (caught) {
       setHistoryError(errorMessage(caught))
@@ -631,7 +672,7 @@ export function StudyWorkbench() {
   const openConversation = (nextConversationId: string) => {
     if (nextConversationId === conversationId || conversationLoading) return
     setConversationHydrated(false)
-    router.push(`/studies/new?conversation=${encodeURIComponent(nextConversationId)}`, { scroll: false })
+    window.location.assign(`/studies/new?conversation=${encodeURIComponent(nextConversationId)}`)
   }
 
   const renameConversation = async (targetConversationId: string, title: string) => {
@@ -664,7 +705,7 @@ export function StudyWorkbench() {
       const nextConversation = remaining[Math.min(Math.max(removedIndex, 0), remaining.length - 1)]
       if (nextConversation) {
         setConversationHydrated(false)
-        router.push(`/studies/new?conversation=${encodeURIComponent(nextConversation.id)}`, { scroll: false })
+        window.location.assign(`/studies/new?conversation=${encodeURIComponent(nextConversation.id)}`)
       } else {
         await startNewConversation()
       }
@@ -790,8 +831,11 @@ export function StudyWorkbench() {
     void handleFile(event.dataTransfer.files?.[0] ?? null)
   }
 
-  const handleFile = async (selected: File | null) => {
-    if (!selected || busy) return
+  const handleFile = async (
+    selected: File | null,
+    options: { allowBusy?: boolean; source?: "attachment" | "synthetic" } = {},
+  ) => {
+    if (!selected || (busy && !options.allowBusy)) return
     const filename = selected.name.toLowerCase()
     if (!filename.endsWith(".csv") && !filename.endsWith(".parquet")) {
       setError("Please attach a CSV or Parquet file.")
@@ -803,7 +847,10 @@ export function StudyWorkbench() {
     setSelectedDimensions([])
     setLineageConfirmed(false)
     setError(null)
-    appendUser(`Attached ${selected.name}`, selected.name)
+    appendUser(
+      options.source === "synthetic" ? `Generated ${selected.name}` : `Attached ${selected.name}`,
+      selected.name,
+    )
     setBusy(true)
     setStage("mapping")
     const activityId = nextActivityId("file")
@@ -825,8 +872,11 @@ export function StudyWorkbench() {
     setActivities((current) => current.map((item) => item.id === activityId ? { ...item, detail: detectedColumns.length ? `${detectedColumns.length} columns detected` : "Schema preview unavailable", status: "done" } : item))
 
     const issues = mappingIssues(suggestion, detectedColumns, input)
+    const columnPreview = detectedColumns.length
+      ? ` Available columns: ${detectedColumns.slice(0, 20).join(", ")}${detectedColumns.length > 20 ? ", …" : ""}.`
+      : ""
     const message = issues.length
-      ? `I found ${detectedColumns.length} columns, but I’m not confident about: ${issues.join(", ")}. Reply with corrections such as “unit=user_id, treatment=variant, metric=outcome”.`
+      ? `I found ${detectedColumns.length} columns, but I’m not confident about: ${issues.join(", ")}.${columnPreview} Reply with corrections such as “unit=user_id, treatment=variant, metric=outcome”.`
       : `I found ${detectedColumns.length || "the proposed"} columns and prepared a mapping: ${mappingSummary(suggestion, input)}. Confirm it or reply with corrections.`
     setTyping(true)
     if (replyTimerRef.current !== null) window.clearTimeout(replyTimerRef.current)
@@ -836,6 +886,41 @@ export function StudyWorkbench() {
       setBusy(false)
       replyTimerRef.current = null
     }, 220)
+  }
+
+  const handleSyntheticDataset = async () => {
+    if (!canAttachDataset || !artifact || !studyId) return
+    setError(null)
+    setBusy(true)
+    const activityId = nextActivityId("synthetic")
+    setActivities((current) => [...current, {
+      id: activityId,
+      kind: "python",
+      label: "Generate synthetic dataset",
+      detail: "Use the frozen design contract and entered planning parameters",
+      status: "running",
+      startedAt: Date.now(),
+    }])
+    appendTool(activityId)
+    try {
+      const generated = await generateSyntheticDataset(studyId, {
+        baseline_value: input.baseline_rate,
+        outcome_standard_deviation: input.outcome_standard_deviation,
+      })
+      setActivities((current) => current.map((activity) => activity.id === activityId
+        ? { ...activity, status: "done", detail: `${generated.name} · frozen contract`, completedAt: Date.now() }
+        : activity))
+      appendAgent("Synthetic data is ready from the frozen design contract. I’m inspecting its schema and will propose the same explicit cleaning plan used for an uploaded dataset.")
+      await handleFile(generated, { allowBusy: true, source: "synthetic" })
+    } catch (caught) {
+      const message = errorMessage(caught)
+      setError(message)
+      setActivities((current) => current.map((activity) => activity.id === activityId
+        ? { ...activity, status: "error", detail: message, completedAt: Date.now() }
+        : activity))
+      appendAgent(`I couldn’t generate synthetic data: ${message}`)
+      setBusy(false)
+    }
   }
 
   const handleMappingCorrection = (answer: string) => {
@@ -1035,12 +1120,10 @@ export function StudyWorkbench() {
         open={settingsOpen}
         onOpenChange={(open) => {
           setSettingsRequested(open)
-          if (!open) setSettingsDismissed(true)
         }}
         settings={agentSettings}
         onSaved={() => {
           setSettingsRequested(false)
-          setSettingsDismissed(true)
           setError(null)
         }}
       />
@@ -1060,7 +1143,9 @@ export function StudyWorkbench() {
         <section className="relative flex min-w-0 flex-1 flex-col" aria-label="Study conversation">
           <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-14 items-center justify-between px-3 sm:px-5">
             <Button type="button" variant="ghost" size="icon-sm" className="pointer-events-auto rounded-lg lg:hidden" onClick={() => setConversationSidebarOpen(true)} aria-label="Open conversation history"><PanelLeft className="h-4 w-4" /></Button>
+            <div className="pointer-events-auto hidden items-center gap-2 pl-2 text-xs sm:flex"><h1 className="font-semibold tracking-normal">Study builder</h1><span className="text-muted-foreground">{WORKFLOW_STEPS[workflowStepIndex(stage)].label}</span></div>
             <div className="pointer-events-auto ml-auto flex items-center gap-1">
+              <Link href="/studies/replay" className="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-primary transition hover:bg-muted lg:inline-flex">Live demonstration <ArrowUpRight className="h-3.5 w-3.5" /></Link>
               <Button type="button" variant="ghost" size="icon-sm" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")} className="rounded-lg text-muted-foreground" aria-label="Toggle color theme" title="Toggle color theme">
                 <Moon className="h-4 w-4 dark:hidden" />
                 <Sun className="hidden h-4 w-4 dark:block" />
@@ -1071,6 +1156,19 @@ export function StudyWorkbench() {
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-6 pt-20 sm:px-6">
             <div className="mx-auto max-w-3xl space-y-6">
+              <WorkflowRail stage={stage} />
+              {stage === "intake" && !artifact && !busy && (
+                <section className="workbench-starter" aria-labelledby="workbench-start-title">
+                  <div className="flex items-center gap-2 text-primary"><CausalMark className="h-6 w-6" /><span className="text-[11px] font-medium">Study workspace</span></div>
+                  <h2 id="workbench-start-title" className="mt-3">Start with a question, or explore a sample study.</h2>
+                  <p>Sample studies include a complete draft contract. Freeze the design, then load demo data or attach your own CSV or Parquet file.</p>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    <Link href="/studies/new?template=onboarding" className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-3 text-[12px] font-medium hover:border-primary/40 hover:text-primary"><span className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-primary" />Onboarding A/B study</span><ArrowUpRight className="h-3.5 w-3.5" /></Link>
+                    <Link href="/studies/new?template=regional-rollout" className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-3 text-[12px] font-medium hover:border-primary/40 hover:text-primary"><span className="flex items-center gap-2"><Database className="h-4 w-4 text-teal-600" />Regional rollout study</span><ArrowUpRight className="h-3.5 w-3.5" /></Link>
+                  </div>
+                  {!agentApiConfigured && <p className="!mt-4 border-t border-border pt-3">For a custom conversation, <button type="button" onClick={openAgentSettings} className="text-primary hover:underline">connect a model</button>. The <Link href="/studies/replay" className="text-primary hover:underline">guided demonstration</Link> runs with the statistical engine alone.</p>}
+                </section>
+              )}
               {conversationLoading && !conversationHydrated && <p className="py-10 text-center text-sm text-muted-foreground">Loading conversation…</p>}
               {readiness.state === "unavailable" && (
                 <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-xs text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-100">
@@ -1093,6 +1191,12 @@ export function StudyWorkbench() {
                   onResend={resendEditedMessage}
                 />
               ))}
+              {stage === "data" && !busy && (
+                <section className="workbench-starter" aria-label="Choose a data source">
+                  <h2>Bring the design to life.</h2><p>Generate a synthetic dataset from this frozen contract, or attach a CSV or Parquet file. Both paths use the same data checks and analysis.</p>
+                  <div className="mt-4 flex flex-wrap gap-2"><Button type="button" onClick={() => void handleSyntheticDataset()} className="rounded-lg shadow-none"><Database className="h-4 w-4" />Load demo data<ArrowRight className="h-4 w-4" /></Button><Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} className="rounded-lg shadow-none"><UploadCloud className="h-4 w-4" />Upload a dataset</Button></div>
+                </section>
+              )}
               {stage === "cleaning" && preparationProfile && (
                 <DataPreparationPanel
                   profile={preparationProfile}
@@ -1117,9 +1221,10 @@ export function StudyWorkbench() {
 
           <div className="shrink-0 bg-background/92 px-4 pb-4 pt-2 backdrop-blur-xl sm:px-6">
             <div className="mx-auto max-w-3xl">
-              {quickReplies.length > 0 && (
-                <div className="mb-2.5 flex gap-2 overflow-x-auto pb-1" aria-label="Suggested replies">
+              {(quickReplies.length > 0 || canAttachDataset) && (
+                <div className="mb-2.5 flex gap-2 overflow-x-auto pb-1" aria-label={canAttachDataset ? "Dataset actions" : "Suggested replies"}>
                   {quickReplies.map((reply) => <button key={reply} type="button" onClick={() => handleQuickReply(reply)} disabled={busy} className="shrink-0 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm transition hover:border-slate-400 hover:bg-muted disabled:opacity-50">{reply}</button>)}
+                  {canAttachDataset && <button type="button" onClick={() => void handleSyntheticDataset()} className="shrink-0 rounded-lg border border-primary/25 bg-accent px-3 py-1.5 text-xs font-medium text-primary transition hover:border-primary" aria-label="Generate synthetic data" title="Generate a dataset from the frozen design">Load demo data</button>}
                 </div>
               )}
               <div
@@ -1149,7 +1254,7 @@ export function StudyWorkbench() {
                   }}
                   rows={1}
                   maxLength={6000}
-                  placeholder={!agentApiConfigured && stage === "intake" ? "Connect DeepSeek to start the conversation…" : placeholderFor(stage)}
+                  placeholder={!agentApiConfigured && stage === "intake" ? "Connect a model to start the conversation…" : placeholderFor(stage)}
                   disabled={conversationLoading || busy || stage === "complete" || (!agentApiConfigured && stage === "intake")}
                   className="max-h-36 min-h-11 resize-none border-0 bg-transparent px-3 py-2.5 shadow-none focus-visible:ring-0 dark:bg-transparent"
                   aria-label="Message the causal agent"
@@ -1158,7 +1263,7 @@ export function StudyWorkbench() {
                   <div className="flex items-center gap-1">
                     <input ref={fileInputRef} type="file" accept=".csv,.parquet" className="sr-only" onChange={(event) => void handleFile(event.target.files?.[0] ?? null)} />
                     <Button type="button" variant="ghost" size="icon-sm" onClick={() => fileInputRef.current?.click()} disabled={busy || (stage !== "data" && stage !== "mapping" && stage !== "cleaning")} className="rounded-lg text-muted-foreground" aria-label="Attach dataset" title="Attach CSV or Parquet"><Paperclip className="h-4 w-4 translate-y-0.5" /></Button>
-                    {!agentApiConfigured && stage === "intake" && <Button type="button" variant="ghost" size="sm" onClick={openAgentSettings} className="rounded-lg text-xs"><KeyRound className="h-3.5 w-3.5" /> Configure DeepSeek</Button>}
+                    {!agentApiConfigured && stage === "intake" && <Button type="button" variant="ghost" size="sm" onClick={openAgentSettings} className="rounded-lg text-xs"><KeyRound className="h-3.5 w-3.5" /> Configure model</Button>}
                   </div>
                   <Button type="button" size="icon-sm" onClick={() => handleAnswer()} disabled={!draft.trim() || conversationLoading || busy || stage === "complete" || (!agentApiConfigured && stage === "intake")} className="rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white" aria-label="Send message"><Send className="h-4 w-4" /></Button>
                 </div>
@@ -1166,6 +1271,15 @@ export function StudyWorkbench() {
             </div>
           </div>
         </section>
+        <aside className="workbench-inspector hidden xl:block" aria-label="Study evidence inspector">
+          <p className="section-kicker">Study record</p><h2 className="mt-2 text-[16px] font-semibold">Evidence at a glance</h2>
+          <p className="mt-3 text-[12px] leading-6 text-muted-foreground">The conversation builds a structured study. Its confirmed assumptions appear here.</p>
+          <dl className="mt-6 space-y-5">
+            {[ ["Research question", capturedFields.includes("business_question") ? input.business_question : "Define the question in the conversation."], ["Method", capturedFields.includes("design_type") ? input.design_type === "did" ? "Difference-in-differences" : "Randomized A/B" : "Awaiting study design"], ["Primary metric", capturedFields.includes("primary_metric") ? input.primary_metric : "Awaiting metric definition"], ["Design status", artifact ? "Frozen and versioned" : "Draft / Open for review"], ["Dataset", file?.name ?? "Load demo data or upload after freezing."] ].map(([label, value]) => <div key={label}><dt className="text-[11px] text-muted-foreground">{label}</dt><dd className="mt-1.5 break-words text-[12px] leading-6">{value}</dd></div>)}
+          </dl>
+          {studyId && <Link href={`/studies/${studyId}`} className="mt-6 flex items-center justify-between border-t border-border pt-4 text-[12px] text-primary">Open evidence record<ArrowUpRight className="h-3.5 w-3.5" /></Link>}
+          <div className="mt-7 border-t border-border pt-5"><p className="section-kicker">Recent execution</p><div className="mt-3 space-y-4">{activities.length ? activities.slice(-4).map((activity) => <div key={activity.id} className="flex items-start gap-2"><ActivityIcon kind={activity.kind} status={activity.status} /><div className="min-w-0"><p className="break-words text-[11px] leading-5 text-muted-foreground">{activity.label.replaceAll("_", " ")}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{activity.status === "done" ? "Completed" : activity.status === "running" ? "Running" : "Needs attention"}</p></div></div>) : <p className="text-[11px] leading-6 text-muted-foreground">Completed tools and data checks will be recorded here.</p>}</div></div>
+        </aside>
       </div>
     </>
   )
@@ -1209,6 +1323,7 @@ function ConversationMessage({
   }
 
   const agent = message.role === "agent"
+  const displayText = normalizeCausalTerms(message.text)
 
   const copyMessage = async () => {
     try {
@@ -1259,7 +1374,7 @@ function ConversationMessage({
           </div>
         ) : (
           <div className={cn("whitespace-pre-wrap text-sm leading-6", agent ? "pt-1 text-foreground" : "rounded-2xl rounded-br-md bg-[#f4f4f4] px-4 py-2.5 text-slate-950 dark:bg-[#2f2f2f] dark:text-slate-50")}>
-            {message.kind === "attachment" ? <span className="flex items-center gap-2"><FileSpreadsheet className="h-4 w-4" />{message.attachmentName}</span> : message.text}
+            {message.kind === "attachment" ? <span className="flex items-center gap-2"><FileSpreadsheet className="h-4 w-4" />{message.attachmentName}</span> : displayText}
           </div>
         )}
         {!agent && !editing && (
@@ -1303,7 +1418,7 @@ function ToolActivityMessage({ activity }: { activity: ActivityEvent }) {
       <ActivityIcon kind={activity.kind} status={activity.status} />
       <div className="min-w-0 flex-1 pt-0.5">
         <p className={cn("text-[11px] font-medium", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.label}</p>
-        {activity.detail && <p className={cn("mt-0.5 text-[10px] leading-4", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.detail}</p>}
+        {activity.detail && <p className={cn("mt-0.5 text-[11px] leading-4", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.detail}</p>}
       </div>
     </article>
   )
@@ -1347,9 +1462,9 @@ function IntakeSummary({ input, capturedFields }: { input: StudyDesignInput; cap
   ]
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-3"><span className="flex items-center gap-2 text-xs font-bold"><MessageSquareText className="h-4 w-4 text-muted-foreground" />Captured contract</span><span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Draft</span></div>
+      <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-3"><span className="flex items-center gap-2 text-xs font-semibold"><MessageSquareText className="h-4 w-4 text-muted-foreground" />Captured contract</span><span className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">Draft</span></div>
       <dl className="grid sm:grid-cols-2">
-        {fields.map(([label, value], index) => <div key={label} className={cn("border-border px-4 py-3", index > 1 && "border-t", index % 2 === 1 && "sm:border-l", index === 1 && "border-t sm:border-t-0")}><dt className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{label}</dt><dd className="mt-1.5 text-xs font-medium leading-5">{value}</dd></div>)}
+        {fields.map(([label, value], index) => <div key={label} className={cn("border-border px-4 py-3", index > 1 && "border-t", index % 2 === 1 && "sm:border-l", index === 1 && "border-t sm:border-t-0")}><dt className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">{label}</dt><dd className="mt-1.5 text-xs font-medium leading-5">{value}</dd></div>)}
       </dl>
       <div className="border-t border-border px-4 py-3 text-[11px] leading-5 text-muted-foreground">Planning defaults: α = {input.alpha}, power = {input.power ?? 0.8}{input.design_type === "rct" && captured.has("allocation_treatment") ? `, treatment allocation = ${(input.allocation_treatment ?? 0.5) * 100}%` : ""}. The outcome window is {captured.has("metric_window_days") ? `${input.metric_window_days} days` : "not captured"}. Nothing is frozen until you confirm.</div>
     </div>
@@ -1376,7 +1491,7 @@ function DesignSummary({ evidence, input }: { evidence: NormalizedEvidence; inpu
       ]
   return (
     <div className="mt-4 rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between gap-4"><span className="flex items-center gap-2 text-xs font-bold"><CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300" />Design frozen</span><code className="text-[9px] text-muted-foreground">{specHash.length > 14 ? `${specHash.slice(0, 8)}…${specHash.slice(-4)}` : specHash}</code></div>
+      <div className="flex items-center justify-between gap-4"><span className="flex items-center gap-2 text-xs font-semibold"><CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300" />Design frozen</span><code className="text-[11px] text-muted-foreground">{specHash.length > 14 ? `${specHash.slice(0, 8)}…${specHash.slice(-4)}` : specHash}</code></div>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {metrics.map((metric) => <SummaryMetric key={metric.label} {...metric} />)}
       </div>
@@ -1392,15 +1507,15 @@ function ResultSummary({ evidence, input, studyId }: { evidence: NormalizedEvide
   const blocking = evidence.diagnostics.filter((item) => item.status === "fail").length
   return (
     <div className="mt-4 border-y border-border py-4">
-      <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Decision</p>
+      <p className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">Decision</p>
       <p className="mt-1 text-lg font-semibold capitalize">{status.replaceAll("_", " ")}</p>
-      <table className="mt-3 w-full border-collapse text-left text-xs"><thead className="border-y border-border text-muted-foreground"><tr><th className="py-2 font-medium">Estimate</th><th className="py-2 font-medium">Diagnostics</th><th className="py-2 font-medium">Report</th></tr></thead><tbody><tr><td className="py-2.5 font-mono">{estimate === null ? "—" : formatEffect(estimate, input.metric_type)}</td><td className="py-2.5 font-mono">{passed} pass · {blocking} block</td><td className="py-2.5">{studyId && <Link className="underline decoration-border underline-offset-4 hover:decoration-foreground" href={`/studies/${studyId}`}>Open interactive report</Link>}</td></tr></tbody></table>
+      <table className="mt-3 w-full border-collapse text-left text-xs"><thead className="border-y border-border text-muted-foreground"><tr><th className="py-2 font-medium">Estimate</th><th className="py-2 font-medium">Diagnostics</th><th className="py-2 font-medium">Report</th></tr></thead><tbody><tr><td className="py-2.5 tabular-nums">{estimate === null ? "—" : formatEffect(estimate, input.metric_type)}</td><td className="py-2.5 tabular-nums">{passed} pass · {blocking} block</td><td className="py-2.5">{studyId && <Link className="underline decoration-border underline-offset-4 hover:decoration-foreground" href={`/studies/${studyId}`}>Open interactive report</Link>}</td></tr></tbody></table>
     </div>
   )
 }
 
 function SummaryMetric({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return <div className="min-w-0"><p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{label}</p><p className={cn("mt-1.5 truncate text-xs font-semibold", mono && "font-mono")}>{value}</p></div>
+  return <div className="min-w-0"><p className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">{label}</p><p className={cn("mt-1.5 truncate text-xs font-semibold", mono && "tabular-nums")}>{value}</p></div>
 }
 
 function ActivityIcon({ kind, status }: { kind: ActivityKind; status: ActivityStatus }) {
@@ -1411,7 +1526,7 @@ function ActivityIcon({ kind, status }: { kind: ActivityKind; status: ActivitySt
 function initialMessages(requestedTemplate: string, hasTemplate: boolean): ChatMessage[] {
   if (hasTemplate) {
     const template = STUDY_TEMPLATES.find((item) => item.id === requestedTemplate)
-    return [{ id: "agent-intro", role: "agent", text: `I loaded the ${template?.label ?? "study"} template. I have not frozen anything. Review the captured assumptions below, then confirm or ask for a change.`, kind: "review" }]
+    return [{ id: "agent-intro", role: "agent", text: `I loaded the ${template?.label ?? "study"} template. Review the draft assumptions, then freeze the design or request a change.`, kind: "review" }]
   }
   return [openingMessage()]
 }
@@ -1422,11 +1537,11 @@ function initialCapturedFields(input: StudyDesignInput, hasTemplate: boolean, re
   return []
 }
 
-function repliesFor(stage: ConversationStage, file: File | null): string[] {
+function repliesFor(stage: ConversationStage, file: File | null, mappingReady: boolean): string[] {
   switch (stage) {
     case "review": return ["Freeze this design", "Change an answer", "Restart intake"]
     case "data": return ["Attach dataset"]
-    case "mapping": return file ? ["Use suggested mapping", "Upload another file"] : ["Attach dataset"]
+    case "mapping": return file ? [...(mappingReady ? ["Confirm mapping"] : []), "Upload another file"] : ["Attach dataset"]
     case "cleaning": return ["Upload another file"]
     case "lineage": return ["Confirm no unrecorded cleaning", "Upload another file"]
     default: return []
@@ -1538,75 +1653,6 @@ function upsertConversationSummary(current: ConversationSummary[], conversation:
   const existingIndex = current.findIndex((item) => item.id === conversation.id)
   if (existingIndex < 0) return [conversation, ...current]
   return current.map((item, index) => index === existingIndex ? conversation : item)
-}
-
-function defaultMapping(input: StudyDesignInput): ColumnMapping {
-  return {
-    unit_col: input.randomization_unit,
-    treatment_col: "treatment",
-    time_col: input.design_type === "did" ? "time" : "",
-    metric_cols: Object.fromEntries([[input.primary_metric, input.primary_metric], ...input.guardrails.map((item) => [item.name, item.name])].filter(([name]) => Boolean(name))),
-    covariate_cols: input.cuped_covariate ? { [input.cuped_covariate]: input.cuped_covariate } : {},
-    dimension_cols: [],
-  }
-}
-
-function suggestMapping(current: ColumnMapping, columns: string[], input: StudyDesignInput): ColumnMapping {
-  const find = (...candidates: string[]) => {
-    const normalized = columns.map((column) => ({ column, normalized: column.toLowerCase() }))
-    for (const candidate of candidates.filter(Boolean)) {
-      const exact = normalized.find((item) => item.normalized === candidate.toLowerCase())
-      if (exact) return exact.column
-    }
-    for (const candidate of candidates.filter(Boolean)) {
-      const partial = normalized.find((item) => item.normalized.includes(candidate.toLowerCase()))
-      if (partial) return partial.column
-    }
-    return ""
-  }
-  return {
-    unit_col: find(input.randomization_unit, "user_id", "unit_id", "account_id", "server_id", "id") || current.unit_col,
-    treatment_col: find("treatment", "variant", "group", "treated") || current.treatment_col,
-    time_col: input.design_type === "did" ? find("time", "date", "period", "week") || current.time_col : "",
-    metric_cols: Object.fromEntries(Object.keys(current.metric_cols).map((metric) => [metric, find(metric, "outcome", "metric") || current.metric_cols[metric]])),
-    covariate_cols: Object.fromEntries(Object.keys(current.covariate_cols).map((metric) => [metric, find(metric) || current.covariate_cols[metric]])),
-    dimension_cols: current.dimension_cols ?? [],
-  }
-}
-
-function mappingIssues(mapping: ColumnMapping, columns: string[], input: StudyDesignInput): string[] {
-  const valid = (value: string) => Boolean(value) && (columns.length === 0 || columns.includes(value))
-  const issues: string[] = []
-  if (!valid(mapping.unit_col)) issues.push("analysis unit")
-  if (!valid(mapping.treatment_col)) issues.push("treatment assignment")
-  if (input.design_type === "did" && !valid(mapping.time_col)) issues.push("time")
-  if (!valid(mapping.metric_cols[input.primary_metric] ?? "")) issues.push(`primary metric (${input.primary_metric})`)
-  for (const guardrail of input.guardrails) if (!valid(mapping.metric_cols[guardrail.name] ?? "")) issues.push(`guardrail (${guardrail.name})`)
-  return issues
-}
-
-function mappingSummary(mapping: ColumnMapping, input: StudyDesignInput): string {
-  const parts = [`unit → ${mapping.unit_col}`, `treatment → ${mapping.treatment_col}`, `metric → ${mapping.metric_cols[input.primary_metric]}`]
-  if (input.design_type === "did") parts.push(`time → ${mapping.time_col}`)
-  return parts.join("; ")
-}
-
-function parseMappingCorrections(current: ColumnMapping, answer: string, input: StudyDesignInput): ColumnMapping {
-  const next = { ...current, metric_cols: { ...current.metric_cols }, covariate_cols: { ...current.covariate_cols } }
-  const pairs = [...answer.matchAll(/([a-zA-Z_ ]+)\s*(?:=|:|\bis\b)\s*([a-zA-Z0-9_.-]+)/g)]
-  for (const match of pairs) {
-    const role = match[1].trim().toLowerCase()
-    const column = match[2].trim()
-    if (role.includes("unit") || role === "id") next.unit_col = column
-    else if (role.includes("treatment") || role.includes("group") || role.includes("variant")) next.treatment_col = column
-    else if (role.includes("time") || role.includes("date") || role.includes("period")) next.time_col = column
-    else if (role.includes("metric") || role.includes("outcome")) next.metric_cols[input.primary_metric] = column
-    else {
-      const guardrail = input.guardrails.find((item) => role.includes(item.name.toLowerCase()))
-      if (guardrail) next.metric_cols[guardrail.name] = column
-    }
-  }
-  return next
 }
 
 function parseCsvHeader(line: string): string[] {

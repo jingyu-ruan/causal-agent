@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "@/components/page-link"
 import { ExternalLink, KeyRound, ShieldCheck, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -9,7 +10,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -25,7 +25,7 @@ import {
 import {
   saveAgentSettings,
   type AgentSettings,
-  type DeepSeekModel,
+  type AgentModel,
 } from "@/lib/agent-settings"
 
 type AgentSettingsFormProps = {
@@ -40,14 +40,33 @@ export function AgentSettingsForm({
   submitLabel = "Save settings",
 }: AgentSettingsFormProps) {
   const [apiKey, setApiKey] = useState(initialSettings.apiKey)
-  const [model, setModel] = useState<DeepSeekModel>(initialSettings.model)
+  const [model, setModel] = useState<AgentModel>(initialSettings.model)
+  const openRouter = model === "openrouter/free"
   const [remember, setRemember] = useState(initialSettings.remember)
   const [error, setError] = useState("")
+  const [connection, setConnection] = useState<"idle" | "testing" | "verified">("idle")
+
+  const testConnection = async () => {
+    setError("")
+    setConnection("testing")
+    try {
+      const { runIntakeAgent } = await import("@/lib/agent-api")
+      await runIntakeAgent({ messages: [{ role: "user", content: "I am planning a prospective randomized experiment. Help me define its business question." }], draft: {}, captured_fields: [], model, locale: "en" }, apiKey)
+      setConnection("verified")
+    } catch (failure) {
+      setConnection("idle")
+      setError(failure instanceof Error ? failure.message : "The connection test failed. Please try again.")
+    }
+  }
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!apiKey.trim()) {
-      setError("Enter a DeepSeek API key to continue.")
+      setError("Enter an API key to continue.")
+      return
+    }
+    if (openRouter !== apiKey.trim().startsWith("sk-or-")) {
+      setError(openRouter ? "Enter an OpenRouter key for the free model router." : "Select OpenRouter Free for an OpenRouter key.")
       return
     }
     setError("")
@@ -58,9 +77,9 @@ export function AgentSettingsForm({
     <form className="space-y-5" onSubmit={handleSubmit}>
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
-          <Label htmlFor="deepseek-api-key">DeepSeek API key</Label>
+          <Label htmlFor="deepseek-api-key">{openRouter ? "OpenRouter API key" : "DeepSeek API key"}</Label>
           <a
-            href="https://platform.deepseek.com/api_keys"
+            href={openRouter ? "https://openrouter.ai/workspaces/default/keys" : "https://platform.deepseek.com/api_keys"}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
@@ -75,7 +94,7 @@ export function AgentSettingsForm({
             type="password"
             autoComplete="off"
             value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
+            onChange={(event) => { setApiKey(event.target.value); setConnection("idle") }}
             placeholder="sk-…"
             className="pl-10 font-mono"
             aria-invalid={Boolean(error)}
@@ -86,15 +105,17 @@ export function AgentSettingsForm({
 
       <div className="space-y-2">
         <Label htmlFor="deepseek-model">Model</Label>
-        <Select value={model} onValueChange={(value) => setModel(value as DeepSeekModel)}>
+        <Select value={model} onValueChange={(value) => { setModel(value as AgentModel); setConnection("idle") }}>
           <SelectTrigger id="deepseek-model" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="openrouter/free">OpenRouter Free — automatic free model</SelectItem>
             <SelectItem value="deepseek-v4-pro">DeepSeek V4 Pro · best quality</SelectItem>
             <SelectItem value="deepseek-v4-flash">DeepSeek V4 Flash · faster</SelectItem>
           </SelectContent>
         </Select>
+        {openRouter && <p className="text-xs leading-5 text-muted-foreground">OpenRouter selects a free model for each request. Your study conversation is sent directly to OpenRouter. Free usage has rate limits.</p>}
       </div>
 
       <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-muted/35 p-3.5">
@@ -111,19 +132,22 @@ export function AgentSettingsForm({
         </span>
       </label>
 
-      <div className="flex gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-[11px] leading-5 text-emerald-950 dark:border-emerald-900/70 dark:bg-emerald-950/25 dark:text-emerald-100">
-        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>
-          The key is never saved to the study database or logs. Requests are restricted to
-          DeepSeek&apos;s official API host.
-        </p>
+      <p className="flex items-center gap-2 text-[11px] text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />Session-only by default. Device memory can be enabled above.</p>
+
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/30 p-3.5">
+        <div><p className="text-xs font-semibold">Just exploring the product?</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Load synthetic data and run a complete study with the statistical engine.</p></div>
+        <Button asChild type="button" variant="outline" size="sm" className="shrink-0 rounded-lg"><Link href="/studies/replay">Live demo</Link></Button>
       </div>
 
-      <DialogFooter className="sm:justify-stretch">
-        <Button type="submit" className="w-full rounded-xl">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)]">
+        <Button type="button" variant="outline" className="min-w-0 w-full" disabled={!apiKey.trim() || connection === "testing"} onClick={testConnection}>
+          {connection === "testing" ? "Testing connection…" : "Test connection"}
+        </Button>
+        <Button type="submit" className="min-w-0 w-full rounded-xl">
           <Sparkles className="h-4 w-4" /> {submitLabel}
         </Button>
-      </DialogFooter>
+      </div>
+      {connection === "verified" && <p role="status" className="text-xs text-emerald-700 dark:text-emerald-300">Connection verified. The Agent returned a valid study form.</p>}
     </form>
   )
 }
@@ -151,7 +175,7 @@ export function AgentSettingsDialog({
             </div>
             <DialogTitle>Connect the study Agent</DialogTitle>
             <DialogDescription className="leading-6">
-              Add your DeepSeek key so the Agent can interpret each answer and generate the next
+              Add your OpenRouter or DeepSeek key so the Agent can interpret each answer and generate the next
               interactive question.
             </DialogDescription>
           </DialogHeader>
