@@ -83,7 +83,7 @@ export function DataPreparationPanel({
         {profile.suggested_dimensions.length === 0 ? <p className="mt-2 text-xs text-muted-foreground">No stable low-cardinality dimension was detected automatically.</p> : (
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
             {profile.suggested_dimensions.map((dimension) => (
-              <label key={dimension} className="flex cursor-pointer items-center gap-2 text-xs"><Checkbox disabled={busy} checked={selectedDimensions.includes(dimension)} onCheckedChange={(checked) => onToggleDimension(dimension, checked === true)} /><code>{dimension}</code></label>
+              <label key={dimension} className="flex cursor-pointer items-center gap-2 text-xs"><Checkbox disabled={busy} checked={selectedDimensions.includes(dimension)} onCheckedChange={(checked) => onToggleDimension(dimension, checked === true)} /><span>{dimension}</span></label>
             ))}
           </div>
         )}
