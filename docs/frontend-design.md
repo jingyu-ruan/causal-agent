@@ -5,19 +5,29 @@ reports for a general audience.
 
 ## Design references
 
-The visual reference is the current Vandy Food Radar workspace stylesheet at
-`sites/public/static/app.css` in that project: system typography, white surfaces,
-subtle gray backgrounds, fine borders, rounded controls, and restrained blue
-emphasis. This project uses a persistent research navigation rail and a separate
-study conversation layout.
+The primary visual and interaction reference is [uiarc.dev](https://uiarc.dev/),
+as requested by the user. It supersedes the previous Food Radar and Apple visual
+references. This direction applies to the entire interface: overview, navigation,
+study conversation, demonstration, library, evidence reports, and settings.
 
-Apple's primary design references:
+Match the reference's typography (font family, weights, sizes, line height, and
+letter spacing), layout and spacing, colors, surfaces, borders, shadows, icons,
+and control styling. Use its motion language for entrances, hover and pressed
+states, panels, and transitions. The implementation uses the public Arc Library
+foundation, Geist and Inter variable fonts, and its published motion presets.
+The [frontend design SOP](frontend-design-sop.md) records the source revision,
+exact parameters, component rules, and workflow for future changes. Read it before
+adding or changing interface elements.
 
-- [Layout](https://developer.apple.com/design/human-interface-guidelines/layout):
-  group related content, establish a clear hierarchy, progressively reveal
-  detail, and adapt to available space.
-- [Typography](https://developer.apple.com/design/human-interface-guidelines/typography):
-  use readable system typography and distinguish information by size and weight.
+Keep the interface responsive, preserve visible keyboard focus, and respect
+`prefers-reduced-motion`. Execution indicators must continue to reflect actual
+operations.
+
+The canonical implementation lives in `frontend/`. Shared tokens and workspace
+styles are in `frontend/app/globals.css`; shared controls are in
+`frontend/components/ui/`. Both the workspace navigation and the separate study
+conversation layout need to follow the same reference. Synchronize completed
+interface changes into `sites/` with `python scripts/sync_sites_frontend.py`.
 
 ## Presentation sequence
 

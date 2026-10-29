@@ -5,7 +5,7 @@ import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 
 const worker = {
   fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
-    if (new URL(request.url).pathname.startsWith("/backend/")) return proxyCausalApi(request);
+    if (new URL(request.url).pathname.startsWith("/backend/")) return proxyCausalApi(request, env.DB);
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
     // the auxiliary service binding are absent from production builds.

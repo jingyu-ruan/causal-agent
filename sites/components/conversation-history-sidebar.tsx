@@ -68,11 +68,11 @@ function SidebarContent(props: ConversationHistorySidebarProps & { onNavigate?: 
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2.5 pb-3">
-        <p className="px-2 pb-2 pt-1 tabular-nums text-[11px] font-semibold normal-case tracking-normal text-muted-foreground">Recent</p>
+        <p className="px-2 pb-2 pt-1 tabular-nums text-[14px] font-semibold normal-case tracking-normal text-muted-foreground">Recent</p>
         {props.loading && props.conversations.length === 0 ? (
-          <p className="px-2 py-4 text-xs text-muted-foreground">Loading conversations…</p>
+          <p className="px-2 py-4 text-sm text-muted-foreground">Loading conversations…</p>
         ) : props.conversations.length === 0 ? (
-          <p className="px-2 py-4 text-xs leading-5 text-muted-foreground">Your conversation history will appear here.</p>
+          <p className="px-2 py-4 text-sm leading-5 text-muted-foreground">Your conversation history will appear here.</p>
         ) : (
           <nav aria-label="Conversation history" className="space-y-0.5">
             {props.conversations.map((conversation) => (
@@ -92,6 +92,8 @@ function SidebarContent(props: ConversationHistorySidebarProps & { onNavigate?: 
       <div className="mt-auto border-t border-border/70 p-2.5">
         <nav aria-label="Workspace navigation" className="space-y-0.5">
           <WorkspaceLink href="/" label="Overview" icon={Home} onClick={props.onNavigate} />
+          <WorkspaceLink href="/cases" label="Case collection" icon={FolderKanban} onClick={props.onNavigate} />
+          <WorkspaceLink href="/research/lab" label="Simulation lab" icon={FlaskConical} onClick={props.onNavigate} />
           <WorkspaceLink href="/studies/replay" label="Live demonstration" icon={FlaskConical} onClick={props.onNavigate} />
           <WorkspaceLink href="/studies" label="Studies" icon={FolderKanban} onClick={props.onNavigate} />
           <WorkspaceLink href="/settings" label="Settings" icon={Settings2} onClick={props.onNavigate} />
@@ -159,7 +161,7 @@ function ConversationHistoryItem({
           }}
           autoFocus
           maxLength={160}
-          className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-slate-400"
+          className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-slate-400"
           aria-label={`Rename ${conversation.title}`}
         />
         <Button type="submit" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-md" disabled={!title.trim() || pending} aria-label="Save conversation name"><Check className="h-3.5 w-3.5" /></Button>
@@ -171,7 +173,7 @@ function ConversationHistoryItem({
   if (mode === "delete") {
     return (
       <div className="flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 dark:border-rose-900/60 dark:bg-rose-950/25">
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-rose-800 dark:text-rose-200">Delete this conversation?</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-rose-800 dark:text-rose-200">Delete this conversation?</span>
         <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-md text-rose-700 hover:bg-rose-100 dark:text-rose-200 dark:hover:bg-rose-900/40" onClick={() => void remove()} disabled={pending} aria-label="Confirm delete conversation"><Trash2 className="h-3.5 w-3.5" /></Button>
         <Button type="button" variant="ghost" size="icon-sm" className="h-7 w-7 rounded-md" onClick={() => setMode("idle")} disabled={pending} aria-label="Cancel delete"><X className="h-3.5 w-3.5" /></Button>
       </div>

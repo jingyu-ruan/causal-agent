@@ -10,6 +10,7 @@ import {
   useState,
 } from "react"
 import { AlertCircle, CheckCircle2, LoaderCircle, RefreshCw } from "lucide-react"
+import { usePathname } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { checkBackendReady } from "@/lib/studies-api"
@@ -27,6 +28,8 @@ const ReadinessContext = createContext<ReadinessContextValue | null>(null)
 const COLD_START_BUDGET_SECONDS = 150
 
 export function BackendReadinessProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  const needsBackend = pathname.startsWith("/studies") || pathname === "/settings"
   const [state, setState] = useState<ReadinessState>("checking")
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [attempt, setAttempt] = useState(0)
@@ -40,9 +43,10 @@ export function BackendReadinessProvider({ children }: { children: React.ReactNo
   }, [])
 
   useEffect(() => {
+    if (!needsBackend) return
     let active = true
     let pollTimer: ReturnType<typeof setTimeout> | undefined
-    if (startedAt.current === null) startedAt.current = Date.now()
+    startedAt.current = Date.now()
 
     const poll = async () => {
       const controller = new AbortController()
@@ -79,7 +83,7 @@ export function BackendReadinessProvider({ children }: { children: React.ReactNo
       if (pollTimer) clearTimeout(pollTimer)
       clearInterval(clockTimer)
     }
-  }, [attempt])
+  }, [attempt, needsBackend])
 
   const value = useMemo(
     () => ({ state, elapsedSeconds, retry }),
@@ -106,7 +110,7 @@ export function BackendStatusPill({ className }: { className?: string }) {
   }[state]
   const Icon = content.icon
   const pillClassName = cn(
-    "inline-flex items-center gap-2 rounded-full px-3 py-1.5 tabular-nums text-[11px] font-semibold normal-case tracking-normal",
+    "inline-flex items-center gap-2 rounded-full px-3 py-1.5 tabular-nums text-[14px] font-semibold normal-case tracking-normal",
     content.style,
     className,
   )
@@ -140,7 +144,7 @@ export function BackendStatusBanner() {
   return (
     <div
       className={cn(
-        "border-b px-4 py-2.5 text-xs sm:px-6 lg:px-8",
+        "border-b px-4 py-2.5 text-sm sm:px-6 lg:px-8",
         isUnavailable
           ? "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-100"
           : "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100",

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react"
 import Link from "@/components/page-link"
 import { useSearchParams } from "next/navigation"
-import { useTheme } from "next-themes"
 import {
   AlertCircle,
   Braces,
@@ -18,7 +17,6 @@ import {
   FileSpreadsheet,
   KeyRound,
   MessageSquareText,
-  Moon,
   PanelLeft,
   Paperclip,
   Pencil,
@@ -26,7 +24,6 @@ import {
   Send,
   Settings2,
   SquareTerminal,
-  Sun,
   UploadCloud,
   Wrench,
   X,
@@ -37,6 +34,7 @@ import { AgentSettingsDialog } from "@/components/agent-settings"
 import { useBackendReadiness } from "@/components/backend-readiness"
 import { ConversationHistorySidebar } from "@/components/conversation-history-sidebar"
 import { CausalMark } from "@/components/causal-mark"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { DataPreparationPanel } from "@/components/data-preparation-panel"
 import { normalizeEvidence, type NormalizedEvidence } from "@/components/study-evidence"
 import { Button } from "@/components/ui/button"
@@ -242,14 +240,14 @@ function WorkflowRail({ stage }: { stage: ConversationStage }) {
   return (
     <div className="mb-7 rounded-2xl border border-border bg-card/75 p-3 shadow-[0_12px_40px_-32px_rgba(15,23,42,0.65)]">
       <div className="flex items-center justify-between gap-3 px-1">
-        <div><p className="tabular-nums text-[11px] font-semibold normal-case tracking-normal text-muted-foreground">Study flow</p><p className="mt-1 text-xs font-semibold">{WORKFLOW_STEPS[current].label} <span className="font-normal text-muted-foreground">{WORKFLOW_STEPS[current].detail}</span></p></div>
-        <span className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">{String(current + 1).padStart(2, "0")} / {String(WORKFLOW_STEPS.length).padStart(2, "0")}</span>
+        <div><p className="tabular-nums text-[14px] font-semibold normal-case tracking-normal text-muted-foreground">Study flow</p><p className="mt-1 text-sm font-semibold">{WORKFLOW_STEPS[current].label} <span className="font-normal text-muted-foreground">{WORKFLOW_STEPS[current].detail}</span></p></div>
+        <span className="tabular-nums text-[14px] normal-case tracking-normal text-muted-foreground">{String(current + 1).padStart(2, "0")} / {String(WORKFLOW_STEPS.length).padStart(2, "0")}</span>
       </div>
       <div className="mt-3 grid grid-cols-5 gap-1.5" aria-label="Study flow progress">
         {WORKFLOW_STEPS.map((step, index) => {
           const complete = index < current
           const active = index === current
-          return <div key={step.label} className="min-w-0"><div className={cn("h-1 rounded-full transition-colors", complete ? "bg-slate-950 dark:bg-slate-100" : active ? "bg-blue-500" : "bg-muted")} /><div className={cn("mt-2 truncate text-[11px] font-semibold", active ? "text-foreground" : "text-muted-foreground")}>{step.label}</div></div>
+          return <div key={step.label} className="min-w-0"><div className={cn("h-1 rounded-full transition-colors", complete ? "bg-slate-950 dark:bg-slate-100" : active ? "bg-blue-500" : "bg-muted")} /><div className={cn("mt-2 truncate text-[14px] font-semibold", active ? "text-foreground" : "text-muted-foreground")}>{step.label}</div></div>
         })}
       </div>
     </div>
@@ -258,7 +256,6 @@ function WorkflowRail({ stage }: { stage: ConversationStage }) {
 
 export function StudyWorkbench() {
   const searchParams = useSearchParams()
-  const { resolvedTheme, setTheme } = useTheme()
   const readiness = useBackendReadiness()
   const requestedConversationId = searchParams.get("conversation")
   const requestedTemplate = searchParams.get("template") ?? ""
@@ -285,6 +282,7 @@ export function StudyWorkbench() {
   const [mapping, setMapping] = useState<ColumnMapping>(() => defaultMapping(startingInput))
   const [preparationProfile, setPreparationProfile] = useState<DatasetPreparationProfile | null>(null)
   const [selectedOperationIds, setSelectedOperationIds] = useState<string[]>([])
+  const [exploreEffects, setExploreEffects] = useState(false)
   const [selectedDimensions, setSelectedDimensions] = useState<string[]>([])
   const [lineageConfirmed, setLineageConfirmed] = useState(false)
   const [activities, setActivities] = useState<ActivityEvent[]>([])
@@ -1067,6 +1065,7 @@ export function StudyWorkbench() {
         }))
         .filter((operation) => operation.operation === "drop_exact_duplicates" || operation.columns.length > 0)
       const result = await analyzeStudy(studyId, file, mappingPayload, {
+        explore_effects: input.design_type === "rct" && exploreEffects,
         transformation_log: [],
         cleaning_plan: {
           source_sha256: preparationProfile.source_sha256,
@@ -1127,7 +1126,7 @@ export function StudyWorkbench() {
           setError(null)
         }}
       />
-      <div className="flex h-dvh overflow-hidden bg-background">
+      <div className="conversation-workspace flex h-dvh overflow-hidden bg-background">
         <ConversationHistorySidebar
           conversations={conversations}
           activeConversationId={conversationId}
@@ -1143,35 +1142,32 @@ export function StudyWorkbench() {
         <section className="relative flex min-w-0 flex-1 flex-col" aria-label="Study conversation">
           <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-14 items-center justify-between px-3 sm:px-5">
             <Button type="button" variant="ghost" size="icon-sm" className="pointer-events-auto rounded-lg lg:hidden" onClick={() => setConversationSidebarOpen(true)} aria-label="Open conversation history"><PanelLeft className="h-4 w-4" /></Button>
-            <div className="pointer-events-auto hidden items-center gap-2 pl-2 text-xs sm:flex"><h1 className="font-semibold tracking-normal">Study builder</h1><span className="text-muted-foreground">{WORKFLOW_STEPS[workflowStepIndex(stage)].label}</span></div>
+            <div className="pointer-events-auto hidden items-center gap-2 pl-2 text-sm sm:flex"><h1 className="font-semibold tracking-normal">Study builder</h1><span className="text-muted-foreground">{WORKFLOW_STEPS[workflowStepIndex(stage)].label}</span></div>
             <div className="pointer-events-auto ml-auto flex items-center gap-1">
-              <Link href="/studies/replay" className="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-primary transition hover:bg-muted lg:inline-flex">Live demonstration <ArrowUpRight className="h-3.5 w-3.5" /></Link>
-              <Button type="button" variant="ghost" size="icon-sm" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")} className="rounded-lg text-muted-foreground" aria-label="Toggle color theme" title="Toggle color theme">
-                <Moon className="h-4 w-4 dark:hidden" />
-                <Sun className="hidden h-4 w-4 dark:block" />
-              </Button>
+              <Link href="/studies/replay" className="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[14px] font-semibold text-primary transition hover:bg-muted lg:inline-flex">Live demonstration <ArrowUpRight className="h-3.5 w-3.5" /></Link>
+              <ThemeToggle />
               <Button type="button" variant="ghost" size="icon-sm" onClick={openAgentSettings} className="rounded-lg text-muted-foreground" aria-label="Agent settings" title="Agent settings"><Settings2 className="h-4 w-4" /></Button>
             </div>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-6 pt-20 sm:px-6">
+          <div className="conversation-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-6 pt-20 sm:px-6">
             <div className="mx-auto max-w-3xl space-y-6">
               <WorkflowRail stage={stage} />
               {stage === "intake" && !artifact && !busy && (
                 <section className="workbench-starter" aria-labelledby="workbench-start-title">
-                  <div className="flex items-center gap-2 text-primary"><CausalMark className="h-6 w-6" /><span className="text-[11px] font-medium">Study workspace</span></div>
+                  <div className="flex items-center gap-2 text-primary"><CausalMark className="h-6 w-6" /><span className="text-[14px] font-medium">Study workspace</span></div>
                   <h2 id="workbench-start-title" className="mt-3">Start with a question, or explore a sample study.</h2>
                   <p>Sample studies include a complete draft contract. Freeze the design, then load demo data or attach your own CSV or Parquet file.</p>
                   <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    <Link href="/studies/new?template=onboarding" className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-3 text-[12px] font-medium hover:border-primary/40 hover:text-primary"><span className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-primary" />Onboarding A/B study</span><ArrowUpRight className="h-3.5 w-3.5" /></Link>
-                    <Link href="/studies/new?template=regional-rollout" className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-3 text-[12px] font-medium hover:border-primary/40 hover:text-primary"><span className="flex items-center gap-2"><Database className="h-4 w-4 text-teal-600" />Regional rollout study</span><ArrowUpRight className="h-3.5 w-3.5" /></Link>
+                    <Link href="/studies/new?template=onboarding" className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-3 text-[14px] font-medium hover:border-primary/40 hover:text-primary"><span className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-primary" />Onboarding A/B study</span><ArrowUpRight className="h-3.5 w-3.5" /></Link>
+                    <Link href="/studies/new?template=regional-rollout" className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-3 text-[14px] font-medium hover:border-primary/40 hover:text-primary"><span className="flex items-center gap-2"><Database className="h-4 w-4 text-teal-600" />Regional rollout study</span><ArrowUpRight className="h-3.5 w-3.5" /></Link>
                   </div>
                   {!agentApiConfigured && <p className="!mt-4 border-t border-border pt-3">For a custom conversation, <button type="button" onClick={openAgentSettings} className="text-primary hover:underline">connect a model</button>. The <Link href="/studies/replay" className="text-primary hover:underline">guided demonstration</Link> runs with the statistical engine alone.</p>}
                 </section>
               )}
               {conversationLoading && !conversationHydrated && <p className="py-10 text-center text-sm text-muted-foreground">Loading conversation…</p>}
               {readiness.state === "unavailable" && (
-                <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-xs text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-100">
+                <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-100">
                   <span>The analysis engine is unavailable.</span>
                   <Button type="button" variant="ghost" size="sm" className="rounded-lg" onClick={readiness.retry}><RefreshCw className="h-3.5 w-3.5" />Retry</Button>
                 </div>
@@ -1202,6 +1198,8 @@ export function StudyWorkbench() {
                   profile={preparationProfile}
                   selectedOperationIds={selectedOperationIds}
                   selectedDimensions={selectedDimensions}
+                  exploreEffects={exploreEffects}
+                  onExploreEffectsChange={input.design_type === "rct" ? setExploreEffects : undefined}
                   lineageConfirmed={lineageConfirmed}
                   busy={busy}
                   onToggleOperation={(id, checked) => setSelectedOperationIds((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))}
@@ -1211,7 +1209,7 @@ export function StudyWorkbench() {
                 />
               )}
               {typing && !activities.some((activity) => activity.id.startsWith("agent-") && activity.status === "running") && <TypingMessage />}
-              {historyError && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">History sync paused: {historyError}</div>}
+              {historyError && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">History sync paused: {historyError}</div>}
               {error && (
                 <div role="alert" className="flex max-w-2xl items-start gap-3 rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-100"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span className="min-w-0 flex-1">{error}</span>{retryAgentRequest && <Button type="button" variant="ghost" size="icon-sm" onClick={retryFailedAgentRequest} className="-my-1 shrink-0 text-rose-800 hover:bg-rose-100 hover:text-rose-950 dark:text-rose-100 dark:hover:bg-rose-900/50 dark:hover:text-white" aria-label="Retry agent request" title="Retry"><RefreshCw className="h-4 w-4" /></Button>}</div>
               )}
@@ -1223,8 +1221,8 @@ export function StudyWorkbench() {
             <div className="mx-auto max-w-3xl">
               {(quickReplies.length > 0 || canAttachDataset) && (
                 <div className="mb-2.5 flex gap-2 overflow-x-auto pb-1" aria-label={canAttachDataset ? "Dataset actions" : "Suggested replies"}>
-                  {quickReplies.map((reply) => <button key={reply} type="button" onClick={() => handleQuickReply(reply)} disabled={busy} className="shrink-0 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm transition hover:border-slate-400 hover:bg-muted disabled:opacity-50">{reply}</button>)}
-                  {canAttachDataset && <button type="button" onClick={() => void handleSyntheticDataset()} className="shrink-0 rounded-lg border border-primary/25 bg-accent px-3 py-1.5 text-xs font-medium text-primary transition hover:border-primary" aria-label="Generate synthetic data" title="Generate a dataset from the frozen design">Load demo data</button>}
+                  {quickReplies.map((reply) => <button key={reply} type="button" onClick={() => handleQuickReply(reply)} disabled={busy} className="shrink-0 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground shadow-sm transition hover:border-slate-400 hover:bg-muted disabled:opacity-50">{reply}</button>)}
+                  {canAttachDataset && <button type="button" onClick={() => void handleSyntheticDataset()} className="shrink-0 rounded-lg border border-primary/25 bg-accent px-3 py-1.5 text-sm font-medium text-primary transition hover:border-primary" aria-label="Generate synthetic data" title="Generate a dataset from the frozen design">Load demo data</button>}
                 </div>
               )}
               <div
@@ -1239,7 +1237,7 @@ export function StudyWorkbench() {
                 onDrop={handleFileDrop}
               >
                 {isDraggingFile && canAttachDataset && (
-                  <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-2xl border-2 border-dashed border-slate-500 bg-background/90 px-4 text-center text-xs font-semibold text-foreground backdrop-blur-sm">
+                  <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-2xl border-2 border-dashed border-slate-500 bg-background/90 px-4 text-center text-sm font-semibold text-foreground backdrop-blur-sm">
                     Drop CSV or Parquet here to attach the dataset
                   </div>
                 )}
@@ -1259,11 +1257,11 @@ export function StudyWorkbench() {
                   className="max-h-36 min-h-11 resize-none border-0 bg-transparent px-3 py-2.5 shadow-none focus-visible:ring-0 dark:bg-transparent"
                   aria-label="Message the causal agent"
                 />
-                <div className="flex items-center justify-between gap-3 px-1 pb-1">
+              <div className="flex items-center justify-between gap-3 px-1 pb-1">
                   <div className="flex items-center gap-1">
                     <input ref={fileInputRef} type="file" accept=".csv,.parquet" className="sr-only" onChange={(event) => void handleFile(event.target.files?.[0] ?? null)} />
                     <Button type="button" variant="ghost" size="icon-sm" onClick={() => fileInputRef.current?.click()} disabled={busy || (stage !== "data" && stage !== "mapping" && stage !== "cleaning")} className="rounded-lg text-muted-foreground" aria-label="Attach dataset" title="Attach CSV or Parquet"><Paperclip className="h-4 w-4 translate-y-0.5" /></Button>
-                    {!agentApiConfigured && stage === "intake" && <Button type="button" variant="ghost" size="sm" onClick={openAgentSettings} className="rounded-lg text-xs"><KeyRound className="h-3.5 w-3.5" /> Configure model</Button>}
+                    {!agentApiConfigured && stage === "intake" && <Button type="button" variant="ghost" size="sm" onClick={openAgentSettings} className="rounded-lg text-sm"><KeyRound className="h-3.5 w-3.5" /> Configure model</Button>}
                   </div>
                   <Button type="button" size="icon-sm" onClick={() => handleAnswer()} disabled={!draft.trim() || conversationLoading || busy || stage === "complete" || (!agentApiConfigured && stage === "intake")} className="rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white" aria-label="Send message"><Send className="h-4 w-4" /></Button>
                 </div>
@@ -1273,12 +1271,12 @@ export function StudyWorkbench() {
         </section>
         <aside className="workbench-inspector hidden xl:block" aria-label="Study evidence inspector">
           <p className="section-kicker">Study record</p><h2 className="mt-2 text-[16px] font-semibold">Evidence at a glance</h2>
-          <p className="mt-3 text-[12px] leading-6 text-muted-foreground">The conversation builds a structured study. Its confirmed assumptions appear here.</p>
+          <p className="mt-3 text-[14px] leading-6 text-muted-foreground">The conversation builds a structured study. Its confirmed assumptions appear here.</p>
           <dl className="mt-6 space-y-5">
-            {[ ["Research question", capturedFields.includes("business_question") ? input.business_question : "Define the question in the conversation."], ["Method", capturedFields.includes("design_type") ? input.design_type === "did" ? "Difference-in-differences" : "Randomized A/B" : "Awaiting study design"], ["Primary metric", capturedFields.includes("primary_metric") ? input.primary_metric : "Awaiting metric definition"], ["Design status", artifact ? "Frozen and versioned" : "Draft / Open for review"], ["Dataset", file?.name ?? "Load demo data or upload after freezing."] ].map(([label, value]) => <div key={label}><dt className="text-[11px] text-muted-foreground">{label}</dt><dd className="mt-1.5 break-words text-[12px] leading-6">{value}</dd></div>)}
+            {[ ["Research question", capturedFields.includes("business_question") ? input.business_question : "Define the question in the conversation."], ["Method", capturedFields.includes("design_type") ? input.design_type === "did" ? "Difference-in-differences" : "Randomized A/B" : "Awaiting study design"], ["Primary metric", capturedFields.includes("primary_metric") ? input.primary_metric : "Awaiting metric definition"], ["Design status", artifact ? "Frozen and versioned" : "Draft / Open for review"], ["Dataset", file?.name ?? "Load demo data or upload after freezing."] ].map(([label, value]) => <div key={label}><dt className="text-[14px] text-muted-foreground">{label}</dt><dd className="mt-1.5 break-words text-[14px] leading-6">{value}</dd></div>)}
           </dl>
-          {studyId && <Link href={`/studies/${studyId}`} className="mt-6 flex items-center justify-between border-t border-border pt-4 text-[12px] text-primary">Open evidence record<ArrowUpRight className="h-3.5 w-3.5" /></Link>}
-          <div className="mt-7 border-t border-border pt-5"><p className="section-kicker">Recent execution</p><div className="mt-3 space-y-4">{activities.length ? activities.slice(-4).map((activity) => <div key={activity.id} className="flex items-start gap-2"><ActivityIcon kind={activity.kind} status={activity.status} /><div className="min-w-0"><p className="break-words text-[11px] leading-5 text-muted-foreground">{activity.label.replaceAll("_", " ")}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{activity.status === "done" ? "Completed" : activity.status === "running" ? "Running" : "Needs attention"}</p></div></div>) : <p className="text-[11px] leading-6 text-muted-foreground">Completed tools and data checks will be recorded here.</p>}</div></div>
+          {studyId && <Link href={`/studies/${studyId}`} className="mt-6 flex items-center justify-between border-t border-border pt-4 text-[14px] text-primary">Open evidence record<ArrowUpRight className="h-3.5 w-3.5" /></Link>}
+          <div className="mt-7 border-t border-border pt-5"><p className="section-kicker">Recent execution</p><div className="mt-3 space-y-4">{activities.length ? activities.slice(-4).map((activity) => <div key={activity.id} className="flex items-start gap-2"><ActivityIcon kind={activity.kind} status={activity.status} /><div className="min-w-0"><p className="break-words text-[14px] leading-5 text-muted-foreground">{activity.label.replaceAll("_", " ")}</p><p className="mt-0.5 text-[14px] text-muted-foreground">{activity.status === "done" ? "Completed" : activity.status === "running" ? "Running" : "Needs attention"}</p></div></div>) : <p className="text-[14px] leading-6 text-muted-foreground">Completed tools and data checks will be recorded here.</p>}</div></div>
         </aside>
       </div>
     </>
@@ -1344,7 +1342,7 @@ function ConversationMessage({
   }
 
   return (
-    <article className={cn("flex gap-3", !agent && "justify-end")}>
+    <article className={cn("conversation-message flex gap-3", !agent && "justify-end")}>
       <div className={cn("min-w-0", agent ? "max-w-[min(100%,48rem)] flex-1" : "group relative max-w-[min(85%,42rem)]")}>
         {editing ? (
           <div className="min-w-[min(34rem,78vw)] rounded-2xl border border-border bg-[#f4f4f4] p-2 shadow-sm dark:bg-[#2f2f2f]">
@@ -1404,7 +1402,7 @@ function ToolActivityMessage({ activity }: { activity: ActivityEvent }) {
         : `Stopped after ${formatElapsed(elapsed)}`
     return (
       <div
-        className={cn("flex items-center gap-2 py-1 text-xs", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}
+        className={cn("flex items-center gap-2 py-1 text-sm", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}
         aria-live={activity.status === "running" ? "polite" : undefined}
       >
         <span className={cn("h-2 w-2 rounded-full bg-current", activity.status === "running" && "animate-pulse")} />
@@ -1417,15 +1415,15 @@ function ToolActivityMessage({ activity }: { activity: ActivityEvent }) {
     <article className="flex max-w-2xl items-start gap-2 py-1" aria-live={activity.status === "running" ? "polite" : undefined}>
       <ActivityIcon kind={activity.kind} status={activity.status} />
       <div className="min-w-0 flex-1 pt-0.5">
-        <p className={cn("text-[11px] font-medium", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.label}</p>
-        {activity.detail && <p className={cn("mt-0.5 text-[11px] leading-4", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.detail}</p>}
+        <p className={cn("text-[14px] font-medium", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.label}</p>
+        {activity.detail && <p className={cn("mt-0.5 text-[14px] leading-4", activity.status === "error" ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{activity.detail}</p>}
       </div>
     </article>
   )
 }
 
 function TypingMessage() {
-  return <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground" aria-label="Agent is responding"><span className="h-2 w-2 animate-pulse rounded-full bg-current" /><span>Thinking…</span></div>
+  return <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground" aria-label="Agent is responding"><span className="h-2 w-2 animate-pulse rounded-full bg-current" /><span>Thinking…</span></div>
 }
 
 function useActivityElapsed(activity: ActivityEvent): number {
@@ -1462,11 +1460,11 @@ function IntakeSummary({ input, capturedFields }: { input: StudyDesignInput; cap
   ]
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-3"><span className="flex items-center gap-2 text-xs font-semibold"><MessageSquareText className="h-4 w-4 text-muted-foreground" />Captured contract</span><span className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">Draft</span></div>
+      <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-3"><span className="flex items-center gap-2 text-sm font-semibold"><MessageSquareText className="h-4 w-4 text-muted-foreground" />Captured contract</span><span className="tabular-nums text-[14px] normal-case tracking-normal text-muted-foreground">Draft</span></div>
       <dl className="grid sm:grid-cols-2">
-        {fields.map(([label, value], index) => <div key={label} className={cn("border-border px-4 py-3", index > 1 && "border-t", index % 2 === 1 && "sm:border-l", index === 1 && "border-t sm:border-t-0")}><dt className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">{label}</dt><dd className="mt-1.5 text-xs font-medium leading-5">{value}</dd></div>)}
+        {fields.map(([label, value], index) => <div key={label} className={cn("border-border px-4 py-3", index > 1 && "border-t", index % 2 === 1 && "sm:border-l", index === 1 && "border-t sm:border-t-0")}><dt className="tabular-nums text-[14px] normal-case tracking-normal text-muted-foreground">{label}</dt><dd className="mt-1.5 text-sm font-medium leading-5">{value}</dd></div>)}
       </dl>
-      <div className="border-t border-border px-4 py-3 text-[11px] leading-5 text-muted-foreground">Planning defaults: α = {input.alpha}, power = {input.power ?? 0.8}{input.design_type === "rct" && captured.has("allocation_treatment") ? `, treatment allocation = ${(input.allocation_treatment ?? 0.5) * 100}%` : ""}. The outcome window is {captured.has("metric_window_days") ? `${input.metric_window_days} days` : "not captured"}. Nothing is frozen until you confirm.</div>
+      <div className="border-t border-border px-4 py-3 text-[14px] leading-5 text-muted-foreground">Planning defaults: α = {input.alpha}, power = {input.power ?? 0.8}{input.design_type === "rct" && captured.has("allocation_treatment") ? `, treatment allocation = ${(input.allocation_treatment ?? 0.5) * 100}%` : ""}. The outcome window is {captured.has("metric_window_days") ? `${input.metric_window_days} days` : "not captured"}. Nothing is frozen until you confirm.</div>
     </div>
   )
 }
@@ -1491,11 +1489,11 @@ function DesignSummary({ evidence, input }: { evidence: NormalizedEvidence; inpu
       ]
   return (
     <div className="mt-4 rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between gap-4"><span className="flex items-center gap-2 text-xs font-semibold"><CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300" />Design frozen</span><code className="text-[11px] text-muted-foreground">{specHash.length > 14 ? `${specHash.slice(0, 8)}…${specHash.slice(-4)}` : specHash}</code></div>
+      <div className="flex items-center justify-between gap-4"><span className="flex items-center gap-2 text-sm font-semibold"><CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300" />Design frozen</span><code className="text-[14px] text-muted-foreground">{specHash.length > 14 ? `${specHash.slice(0, 8)}…${specHash.slice(-4)}` : specHash}</code></div>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {metrics.map((metric) => <SummaryMetric key={metric.label} {...metric} />)}
       </div>
-      <p className="mt-4 border-t border-border pt-3 text-[11px] leading-5 text-muted-foreground"><UploadCloud className="mr-1.5 inline h-3.5 w-3.5" />Attach a CSV or Parquet file below. The Agent will profile it and ask you to confirm any proposed cleaning before analysis.</p>
+      <p className="mt-4 border-t border-border pt-3 text-[14px] leading-5 text-muted-foreground"><UploadCloud className="mr-1.5 inline h-3.5 w-3.5" />Attach a CSV or Parquet file below. The Agent will profile it and ask you to confirm any proposed cleaning before analysis.</p>
     </div>
   )
 }
@@ -1507,15 +1505,15 @@ function ResultSummary({ evidence, input, studyId }: { evidence: NormalizedEvide
   const blocking = evidence.diagnostics.filter((item) => item.status === "fail").length
   return (
     <div className="mt-4 border-y border-border py-4">
-      <p className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">Decision</p>
+      <p className="tabular-nums text-[14px] normal-case tracking-normal text-muted-foreground">Decision</p>
       <p className="mt-1 text-lg font-semibold capitalize">{status.replaceAll("_", " ")}</p>
-      <table className="mt-3 w-full border-collapse text-left text-xs"><thead className="border-y border-border text-muted-foreground"><tr><th className="py-2 font-medium">Estimate</th><th className="py-2 font-medium">Diagnostics</th><th className="py-2 font-medium">Report</th></tr></thead><tbody><tr><td className="py-2.5 tabular-nums">{estimate === null ? "—" : formatEffect(estimate, input.metric_type)}</td><td className="py-2.5 tabular-nums">{passed} pass · {blocking} block</td><td className="py-2.5">{studyId && <Link className="underline decoration-border underline-offset-4 hover:decoration-foreground" href={`/studies/${studyId}`}>Open interactive report</Link>}</td></tr></tbody></table>
+      <table className="mt-3 w-full border-collapse text-left text-sm"><thead className="border-y border-border text-muted-foreground"><tr><th className="py-2 font-medium">Estimate</th><th className="py-2 font-medium">Diagnostics</th><th className="py-2 font-medium">Report</th></tr></thead><tbody><tr><td className="py-2.5 tabular-nums">{estimate === null ? "—" : formatEffect(estimate, input.metric_type)}</td><td className="py-2.5 tabular-nums">{passed} pass · {blocking} block</td><td className="py-2.5">{studyId && <Link className="underline decoration-border underline-offset-4 hover:decoration-foreground" href={`/studies/${studyId}`}>Open interactive report</Link>}</td></tr></tbody></table>
     </div>
   )
 }
 
 function SummaryMetric({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return <div className="min-w-0"><p className="tabular-nums text-[11px] normal-case tracking-normal text-muted-foreground">{label}</p><p className={cn("mt-1.5 truncate text-xs font-semibold", mono && "tabular-nums")}>{value}</p></div>
+  return <div className="min-w-0"><p className="tabular-nums text-[14px] normal-case tracking-normal text-muted-foreground">{label}</p><p className={cn("mt-1.5 truncate text-sm font-semibold", mono && "tabular-nums")}>{value}</p></div>
 }
 
 function ActivityIcon({ kind, status }: { kind: ActivityKind; status: ActivityStatus }) {

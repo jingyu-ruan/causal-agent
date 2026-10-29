@@ -141,7 +141,15 @@ study templates can proceed to frozen design and demo data without a model key.
 
 The Sites deployment source lives in `sites/`. The canonical interface is
 `frontend/`; run `python scripts/sync_sites_frontend.py` after changing its
-application code. This preserves the Sites Worker and hosting identity.
+application code. The sync includes shared styles, local fonts, and standalone
+report source while preserving the Sites Worker, D1 bindings, migrations, and
+hosting identity. Run `npm run build` in `frontend/` to build both the Next.js
+application and its portable report runtime.
+
+The repository includes the deployed Sites source through commit
+`745745e90e6329ebc44b590ca4db2c5499146448` (version 12). Before synchronizing
+from a checkout that may be stale, compare it with the Sites source repository
+and bring newer deployed work into `frontend/` first.
 
 The Sites Worker serves the Vinext frontend and proxies same-origin `/backend`
 requests to `https://causal-agent.onrender.com`. It forwards only the content type

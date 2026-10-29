@@ -82,7 +82,7 @@ export function AgentSettingsForm({
             href={openRouter ? "https://openrouter.ai/workspaces/default/keys" : "https://platform.deepseek.com/api_keys"}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1 text-[14px] font-semibold text-muted-foreground hover:text-foreground"
           >
             Create a key <ExternalLink className="h-3 w-3" />
           </a>
@@ -100,7 +100,7 @@ export function AgentSettingsForm({
             aria-invalid={Boolean(error)}
           />
         </div>
-        {error && <p className="text-xs text-rose-600 dark:text-rose-300">{error}</p>}
+        {error && <p className="text-sm text-rose-600 dark:text-rose-300">{error}</p>}
       </div>
 
       <div className="space-y-2">
@@ -115,7 +115,7 @@ export function AgentSettingsForm({
             <SelectItem value="deepseek-v4-flash">DeepSeek V4 Flash · faster</SelectItem>
           </SelectContent>
         </Select>
-        {openRouter && <p className="text-xs leading-5 text-muted-foreground">OpenRouter selects a free model for each request. Your study conversation is sent directly to OpenRouter. Free usage has rate limits.</p>}
+        {openRouter && <p className="text-sm leading-5 text-muted-foreground">OpenRouter selects a free model for each request. Your study conversation is sent directly to OpenRouter. Free usage has rate limits.</p>}
       </div>
 
       <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-muted/35 p-3.5">
@@ -126,16 +126,16 @@ export function AgentSettingsForm({
         />
         <span>
           <span className="block text-sm font-semibold">Remember on this device</span>
-          <span className="mt-1 block text-[11px] leading-5 text-muted-foreground">
+          <span className="mt-1 block text-[14px] leading-5 text-muted-foreground">
             Off by default. When off, the key lasts only for this browser session.
           </span>
         </span>
       </label>
 
-      <p className="flex items-center gap-2 text-[11px] text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />Session-only by default. Device memory can be enabled above.</p>
+      <p className="flex items-center gap-2 text-[14px] text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />Session-only by default. Device memory can be enabled above.</p>
 
       <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/30 p-3.5">
-        <div><p className="text-xs font-semibold">Just exploring the product?</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Load synthetic data and run a complete study with the statistical engine.</p></div>
+        <div><p className="text-sm font-semibold">Just exploring the product?</p><p className="mt-1 text-[14px] leading-5 text-muted-foreground">Load synthetic data and run a complete study with the statistical engine.</p></div>
         <Button asChild type="button" variant="outline" size="sm" className="shrink-0 rounded-lg"><Link href="/studies/replay">Live demo</Link></Button>
       </div>
 
@@ -147,7 +147,7 @@ export function AgentSettingsForm({
           <Sparkles className="h-4 w-4" /> {submitLabel}
         </Button>
       </div>
-      {connection === "verified" && <p role="status" className="text-xs text-emerald-700 dark:text-emerald-300">Connection verified. The Agent returned a valid study form.</p>}
+      {connection === "verified" && <p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">Connection verified. The Agent returned a valid study form.</p>}
     </form>
   )
 }

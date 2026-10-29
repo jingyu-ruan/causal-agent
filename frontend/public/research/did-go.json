@@ -1,0 +1,931 @@
+{
+  "id": "reference-did-go",
+  "design": {
+    "title": "A regional rollout",
+    "question": "Did a regional rollout increase customer value beyond the common time trend?",
+    "method": "did",
+    "minimum_effect": 0.2,
+    "harm_tolerance": 0.5,
+    "covariates": [
+      "engagement",
+      "age_score"
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment",
+          "observed": true
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome",
+          "observed": true
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "context",
+          "observed": true
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "context",
+          "observed": true
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        }
+      ],
+      "confirmed": true
+    },
+    "retrospective": false,
+    "exploratory": false,
+    "balance_threshold": 0.2,
+    "missingness_gap_threshold": 0.05,
+    "overlap_tail_threshold": 0.1,
+    "treatment_start": 6,
+    "spec_hash": "ee396693da3416d1e10bde1d7f211eec549fd3cd75ae65c9aea686d0abab6ec4"
+  },
+  "parent_id": null,
+  "branch_reason": null,
+  "case_id": "did-go",
+  "created_at": "2026-10-29T00:00:00Z",
+  "reference_snapshot": true,
+  "runs": [
+    {
+      "id": "reference-run-did-go",
+      "project_id": "reference-did-go",
+      "created_at": "2026-10-29T00:00:00Z",
+      "source_kind": "synthetic_reference",
+      "filename": "did-go.csv",
+      "source_sha256": "1eea533cf563a6033b62edab0d2b9ffba7a99dc44b8097b7ca54fe2442a31020",
+      "simulation": {
+        "seed": 42,
+        "sample_size": 1200,
+        "true_effect": 1.0,
+        "confounding": 1.2,
+        "noise": 0.3,
+        "missing_rate": 0,
+        "treatment_missing_extra": 0,
+        "guardrail_effect": 0,
+        "nonparallel_trend": 0,
+        "heterogeneous": false,
+        "overlap_failure": false,
+        "imbalance": false,
+        "duplicate_units": false
+      },
+      "result": {
+        "design": {
+          "title": "A regional rollout",
+          "question": "Did a regional rollout increase customer value beyond the common time trend?",
+          "method": "did",
+          "minimum_effect": 0.2,
+          "harm_tolerance": 0.5,
+          "covariates": [
+            "engagement",
+            "age_score"
+          ],
+          "graph": {
+            "nodes": [
+              {
+                "id": "treatment",
+                "label": "Treatment",
+                "role": "treatment",
+                "observed": true
+              },
+              {
+                "id": "outcome",
+                "label": "Outcome",
+                "role": "outcome",
+                "observed": true
+              },
+              {
+                "id": "engagement",
+                "label": "Prior engagement",
+                "role": "context",
+                "observed": true
+              },
+              {
+                "id": "age_score",
+                "label": "Account tenure",
+                "role": "context",
+                "observed": true
+              }
+            ],
+            "edges": [
+              {
+                "source": "treatment",
+                "target": "outcome"
+              },
+              {
+                "source": "engagement",
+                "target": "outcome"
+              },
+              {
+                "source": "age_score",
+                "target": "outcome"
+              }
+            ],
+            "confirmed": true
+          },
+          "retrospective": false,
+          "exploratory": false,
+          "balance_threshold": 0.2,
+          "missingness_gap_threshold": 0.05,
+          "overlap_tail_threshold": 0.1,
+          "treatment_start": 6,
+          "spec_hash": "ee396693da3416d1e10bde1d7f211eec549fd3cd75ae65c9aea686d0abab6ec4"
+        },
+        "profile": {
+          "row_count": 1200,
+          "columns": [
+            "unit_id",
+            "treatment",
+            "time",
+            "outcome",
+            "guardrail",
+            "engagement",
+            "age_score",
+            "segment"
+          ],
+          "missing_columns": [],
+          "invalid_numeric": {},
+          "unknown_groups": [],
+          "missing_rows": 0,
+          "duplicate_grain_rows": 0,
+          "arms": [
+            {
+              "arm": "control",
+              "source_rows": 600,
+              "excluded_rows": 0,
+              "analyzed_rows": 600,
+              "missing_rate": 0.0
+            },
+            {
+              "arm": "treatment",
+              "source_rows": 600,
+              "excluded_rows": 0,
+              "analyzed_rows": 600,
+              "missing_rate": 0.0
+            }
+          ],
+          "preview": [
+            {
+              "unit_id": "region_0000",
+              "treatment": "control",
+              "time": 0,
+              "outcome": 10.6944855691,
+              "guardrail": 1.8931208087,
+              "engagement": 0.3047170798,
+              "age_score": -0.378162554,
+              "segment": "New"
+            },
+            {
+              "unit_id": "region_0000",
+              "treatment": "control",
+              "time": 1,
+              "outcome": 10.6759717503,
+              "guardrail": 1.719914696,
+              "engagement": 0.3047170798,
+              "age_score": -0.378162554,
+              "segment": "New"
+            },
+            {
+              "unit_id": "region_0000",
+              "treatment": "control",
+              "time": 2,
+              "outcome": 10.5430858124,
+              "guardrail": 1.7149933835,
+              "engagement": 0.3047170798,
+              "age_score": -0.378162554,
+              "segment": "New"
+            },
+            {
+              "unit_id": "region_0000",
+              "treatment": "control",
+              "time": 3,
+              "outcome": 10.653007157,
+              "guardrail": 2.2520924412,
+              "engagement": 0.3047170798,
+              "age_score": -0.378162554,
+              "segment": "New"
+            },
+            {
+              "unit_id": "region_0000",
+              "treatment": "control",
+              "time": 4,
+              "outcome": 10.3865209528,
+              "guardrail": 2.1303270931,
+              "engagement": 0.3047170798,
+              "age_score": -0.378162554,
+              "segment": "New"
+            },
+            {
+              "unit_id": "region_0000",
+              "treatment": "control",
+              "time": 5,
+              "outcome": 11.1260377605,
+              "guardrail": 1.8217550133,
+              "engagement": 0.3047170798,
+              "age_score": -0.378162554,
+              "segment": "New"
+            },
+            {
+              "unit_id": "region_0000",
+              "treatment": "control",
+              "time": 6,
+              "outcome": 10.7708997234,
+              "guardrail": 2.0216388523,
+              "engagement": 0.3047170798,
+              "age_score": -0.378162554,
+              "segment": "New"
+            },
+            {
+              "unit_id": "region_0000",
+              "treatment": "control",
+              "time": 7,
+              "outcome": 11.195869267,
+              "guardrail": 2.0698028634,
+              "engagement": 0.3047170798,
+              "age_score": -0.378162554,
+              "segment": "New"
+            }
+          ],
+          "policy": "Only confirmed complete-case removal is supported. Primary outcomes are never imputed. Conflicting duplicate units block analysis."
+        },
+        "dataset": {
+          "sha256": "1eea533cf563a6033b62edab0d2b9ffba7a99dc44b8097b7ca54fe2442a31020",
+          "row_count": 1200,
+          "source_rows": 1200,
+          "excluded_rows": 0
+        },
+        "primary_estimate": {
+          "metric_name": "outcome",
+          "metric_kind": "continuous",
+          "method": "two_way_fixed_effects_unit_clustered_se",
+          "effect": 1.001653123211816,
+          "standard_error": 0.033626980288369024,
+          "ci_lower": 0.9349298988929718,
+          "ci_upper": 1.06837634753066,
+          "p_value": 3.2101489763777456e-51,
+          "control_mean": 11.360233521496669,
+          "treatment_mean": 12.05083422302553,
+          "relative_lift": null,
+          "n_control": 600,
+          "n_treatment": 600,
+          "cuped_applied": false,
+          "details": {
+            "cluster_degrees_freedom": 99,
+            "raw_cells": {
+              "control_pre": 10.469027154228316,
+              "control_post": 11.360233521496669,
+              "treatment_pre": 10.15797473254536,
+              "treatment_post": 12.05083422302553
+            }
+          }
+        },
+        "guardrail_estimate": {
+          "metric_name": "guardrail",
+          "metric_kind": "continuous",
+          "method": "two_way_fixed_effects_unit_clustered_se",
+          "effect": -0.004107781666688879,
+          "standard_error": 0.03502313672849271,
+          "ci_lower": -0.07360128326109297,
+          "ci_upper": 0.06538571992771522,
+          "p_value": 0.9068697253226966,
+          "control_mean": 1.977341458672415,
+          "treatment_mean": 2.002724746166259,
+          "relative_lift": null,
+          "n_control": 600,
+          "n_treatment": 600,
+          "cuped_applied": false,
+          "details": {
+            "cluster_degrees_freedom": 99,
+            "raw_cells": {
+              "control_pre": 1.9905480921663548,
+              "control_post": 1.977341458672415,
+              "treatment_pre": 2.020039161326888,
+              "treatment_post": 2.002724746166259
+            }
+          }
+        },
+        "naive_estimate": {
+          "metric_name": "outcome",
+          "metric_kind": "continuous",
+          "method": "naive_welch_difference",
+          "effect": 0.1897741399229531,
+          "standard_error": 0.06552635498167636,
+          "ci_lower": 0.061206029308038534,
+          "ci_upper": 0.3183422505378677,
+          "p_value": 0.0038510709930791045,
+          "control_mean": 10.914630337862492,
+          "treatment_mean": 11.104404477785446,
+          "n_control": 600,
+          "n_treatment": 600
+        },
+        "observational": null,
+        "diagnostics": [
+          {
+            "code": "column_mapping",
+            "status": "pass",
+            "message": "All required logical roles have column mappings.",
+            "details": {}
+          },
+          {
+            "code": "required_columns",
+            "status": "pass",
+            "message": "All mapped columns are present in the dataset.",
+            "details": {}
+          },
+          {
+            "code": "non_empty_dataset",
+            "status": "pass",
+            "message": "The dataset contains observations.",
+            "details": {}
+          },
+          {
+            "code": "missing_required_values",
+            "status": "pass",
+            "message": "Required analysis fields contain no missing values.",
+            "details": {}
+          },
+          {
+            "code": "time_values",
+            "status": "pass",
+            "message": "Time values and treatment start share a numeric or datetime scale.",
+            "details": {}
+          },
+          {
+            "code": "numeric_metric_values",
+            "status": "pass",
+            "message": "All outcome metrics are numeric.",
+            "details": {}
+          },
+          {
+            "code": "finite_metric_values",
+            "status": "pass",
+            "message": "All outcome metrics contain finite values.",
+            "details": {}
+          },
+          {
+            "code": "binary_metric_values",
+            "status": "pass",
+            "message": "All binary metrics contain only 0/1 values.",
+            "details": {}
+          },
+          {
+            "code": "treatment_values",
+            "status": "pass",
+            "message": "Treatment values match the frozen design.",
+            "details": {}
+          },
+          {
+            "code": "transformation_lineage",
+            "status": "pass",
+            "message": "The transformation log terminates at the analyzed dataset row count.",
+            "details": {
+              "final_logged_rows": 1200,
+              "analyzed_rows": 1200
+            }
+          },
+          {
+            "code": "unit_time_grain",
+            "status": "pass",
+            "message": "Each unit-time pair is unique.",
+            "details": {
+              "duplicate_rows": 0
+            }
+          },
+          {
+            "code": "stable_treatment_assignment",
+            "status": "pass",
+            "message": "Treatment assignment is constant within each unit.",
+            "details": {
+              "unstable_units": []
+            }
+          },
+          {
+            "code": "panel_time_support",
+            "status": "pass",
+            "message": "The panel has sufficient pre- and post-treatment periods.",
+            "details": {
+              "pre_periods": 6,
+              "post_periods": 6,
+              "required_pre_periods": 4
+            }
+          },
+          {
+            "code": "time_group_overlap",
+            "status": "pass",
+            "message": "Control and treatment units are observed in every analysis period.",
+            "details": {
+              "periods_without_overlap": []
+            }
+          },
+          {
+            "code": "identification_rank",
+            "status": "pass",
+            "message": "Treatment and event-study effects add the expected identifying rank.",
+            "details": {
+              "base_rank": 111,
+              "main_rank": 112,
+              "event_rank": 122,
+              "expected_event_increment": 11
+            }
+          },
+          {
+            "code": "group_unit_count",
+            "status": "pass",
+            "message": "Both DiD groups satisfy the recommended unit count.",
+            "details": {
+              "control_units": 50,
+              "treatment_units": 50,
+              "recommended_minimum": 20
+            }
+          },
+          {
+            "code": "balanced_panel",
+            "status": "pass",
+            "message": "The unit-time panel is balanced.",
+            "details": {
+              "observed_cells": 1200,
+              "expected_cells": 1200
+            }
+          },
+          {
+            "code": "parallel_trends",
+            "status": "pass",
+            "message": "The joint event-study pre-trend test did not reject parallel trends.",
+            "details": {
+              "p_value": 0.6381732351854297,
+              "threshold": 0.05,
+              "tested_coefficients": 5,
+              "reference_relative_period": -1
+            }
+          }
+        ],
+        "event_study": [
+          {
+            "time_value": 0,
+            "relative_period": -6,
+            "is_reference": false,
+            "effect": -0.09519490245811674,
+            "standard_error": 0.10226621030874303,
+            "ci_lower": -0.29811325052722626,
+            "ci_upper": 0.10772344561099281,
+            "p_value": 0.35419352318710834
+          },
+          {
+            "time_value": 1,
+            "relative_period": -5,
+            "is_reference": false,
+            "effect": -0.09208787493838815,
+            "standard_error": 0.07856845271894959,
+            "ci_lower": -0.2479847306832439,
+            "ci_upper": 0.06380898080646759,
+            "p_value": 0.24398104712120547
+          },
+          {
+            "time_value": 2,
+            "relative_period": -4,
+            "is_reference": false,
+            "effect": -0.05017813985581071,
+            "standard_error": 0.08576924345129945,
+            "ci_lower": -0.2203629266366214,
+            "ci_upper": 0.12000664692499999,
+            "p_value": 0.5598542330080872
+          },
+          {
+            "time_value": 3,
+            "relative_period": -3,
+            "is_reference": false,
+            "effect": -0.09687473347970858,
+            "standard_error": 0.08623284587397152,
+            "ci_lower": -0.2679794080463817,
+            "ci_upper": 0.07422994108696455,
+            "p_value": 0.2639807853611906
+          },
+          {
+            "time_value": 4,
+            "relative_period": -2,
+            "is_reference": false,
+            "effect": -0.001427103394664564,
+            "standard_error": 0.08163748312080486,
+            "ci_lower": -0.1634135812878156,
+            "ci_upper": 0.16055937449848648,
+            "p_value": 0.986088086547306
+          },
+          {
+            "time_value": 5,
+            "relative_period": -1,
+            "is_reference": true,
+            "effect": 0.0,
+            "standard_error": null,
+            "ci_lower": null,
+            "ci_upper": null,
+            "p_value": null
+          },
+          {
+            "time_value": 6,
+            "relative_period": 0,
+            "is_reference": false,
+            "effect": 1.035251877671549,
+            "standard_error": 0.09193120219834408,
+            "ci_lower": 0.852840427889876,
+            "ci_upper": 1.2176633274532218,
+            "p_value": 1.9875819930737108e-19
+          },
+          {
+            "time_value": 7,
+            "relative_period": 1,
+            "is_reference": false,
+            "effect": 0.9730609679471894,
+            "standard_error": 0.09038184675360003,
+            "ci_lower": 0.7937237755030104,
+            "ci_upper": 1.1523981603913684,
+            "p_value": 2.348659072650484e-18
+          },
+          {
+            "time_value": 8,
+            "relative_period": 2,
+            "is_reference": false,
+            "effect": 0.8947882015618449,
+            "standard_error": 0.09222037308070849,
+            "ci_lower": 0.7118029740134794,
+            "ci_upper": 1.0777734291102103,
+            "p_value": 4.871059498935327e-16
+          },
+          {
+            "time_value": 9,
+            "relative_period": 3,
+            "is_reference": false,
+            "effect": 0.8899481419997929,
+            "standard_error": 0.09705299897421162,
+            "ci_lower": 0.697373936232863,
+            "ci_upper": 1.0825223477667227,
+            "p_value": 7.0771643474850625e-15
+          },
+          {
+            "time_value": 10,
+            "relative_period": 4,
+            "is_reference": false,
+            "effect": 0.9152736481947197,
+            "standard_error": 0.08767461367604393,
+            "ci_lower": 0.7413081935149229,
+            "ci_upper": 1.0892391028745163,
+            "p_value": 1.2056469085728046e-17
+          },
+          {
+            "time_value": 11,
+            "relative_period": 5,
+            "is_reference": false,
+            "effect": 0.9658331477691248,
+            "standard_error": 0.09798612087881092,
+            "ci_lower": 0.7714074257011924,
+            "ci_upper": 1.1602588698370573,
+            "p_value": 2.2456460137770993e-16
+          }
+        ],
+        "dimension_analyses": [
+          {
+            "dimension": "segment",
+            "consistency": {
+              "method": "cochran_q_heterogeneity",
+              "statistic": 3.1492736921557074,
+              "degrees_freedom": 2,
+              "p_value": 0.20708274193763307,
+              "alpha": 0.05,
+              "consistent": true,
+              "interpretation": "Cochran’s Q did not detect effect heterogeneity across the estimable, mutually exclusive subgroups. This is not proof that effects are identical."
+            },
+            "subgroups": [
+              {
+                "dimension": "segment",
+                "level": "New",
+                "estimate": {
+                  "metric_name": "outcome",
+                  "metric_kind": "continuous",
+                  "method": "two_way_fixed_effects_unit_clustered_se",
+                  "effect": 0.939153423592645,
+                  "standard_error": 0.05622631503105457,
+                  "ci_lower": 0.8247601255427588,
+                  "ci_upper": 1.0535467216425312,
+                  "p_value": 1.1595645837625676e-17,
+                  "control_mean": 11.390431497139748,
+                  "treatment_mean": 12.075798444476323,
+                  "relative_lift": null,
+                  "n_control": 204,
+                  "n_treatment": 204,
+                  "cuped_applied": false,
+                  "details": {
+                    "cluster_degrees_freedom": 33,
+                    "raw_cells": {
+                      "control_pre": 10.47866510079246,
+                      "control_post": 11.390431497139748,
+                      "treatment_pre": 10.224878624536391,
+                      "treatment_post": 12.075798444476323
+                    }
+                  }
+                },
+                "adjusted_p_value": 2.3191291675251352e-17,
+                "significant": true,
+                "direction": "favorable",
+                "recommendation": "Favorable subgroup signal; use it for monitored rollout prioritization, not as a replacement for the overall decision."
+              },
+              {
+                "dimension": "segment",
+                "level": "Power",
+                "estimate": {
+                  "metric_name": "outcome",
+                  "metric_kind": "continuous",
+                  "method": "two_way_fixed_effects_unit_clustered_se",
+                  "effect": 1.0909073196539192,
+                  "standard_error": 0.06753208660699771,
+                  "ci_lower": 0.9533489606906902,
+                  "ci_upper": 1.2284656786171482,
+                  "p_value": 6.071116630344924e-17,
+                  "control_mean": 11.333501871793374,
+                  "treatment_mean": 12.294195319950205,
+                  "relative_lift": null,
+                  "n_control": 192,
+                  "n_treatment": 204,
+                  "cuped_applied": false,
+                  "details": {
+                    "cluster_degrees_freedom": 32,
+                    "raw_cells": {
+                      "control_pre": 10.464513188709075,
+                      "control_post": 11.333501871793374,
+                      "treatment_pre": 10.334299317211993,
+                      "treatment_post": 12.294195319950205
+                    }
+                  }
+                },
+                "adjusted_p_value": 6.071116630344924e-17,
+                "significant": true,
+                "direction": "favorable",
+                "recommendation": "Favorable subgroup signal; use it for monitored rollout prioritization, not as a replacement for the overall decision."
+              },
+              {
+                "dimension": "segment",
+                "level": "Returning",
+                "estimate": {
+                  "metric_name": "outcome",
+                  "metric_kind": "continuous",
+                  "method": "two_way_fixed_effects_unit_clustered_se",
+                  "effect": 0.974636996380592,
+                  "standard_error": 0.048833164086331475,
+                  "ci_lower": 0.875167096186485,
+                  "ci_upper": 1.074106896574699,
+                  "p_value": 1.2679775056169339e-19,
+                  "control_mean": 11.35519474557434,
+                  "treatment_mean": 11.765738572251594,
+                  "relative_lift": null,
+                  "n_control": 204,
+                  "n_treatment": 192,
+                  "cuped_applied": false,
+                  "details": {
+                    "cluster_degrees_freedom": 32,
+                    "raw_cells": {
+                      "control_pre": 10.46363764579993,
+                      "control_post": 11.35519474557434,
+                      "treatment_pre": 9.8995444760966,
+                      "treatment_post": 11.765738572251594
+                    }
+                  }
+                },
+                "adjusted_p_value": 3.8039325168508016e-19,
+                "significant": true,
+                "direction": "favorable",
+                "recommendation": "Favorable subgroup signal; use it for monitored rollout prioritization, not as a replacement for the overall decision."
+              }
+            ],
+            "skipped_reason": null
+          }
+        ],
+        "decision": {
+          "status": "go",
+          "summary": "Go: the primary threshold is met and all guardrails are non-inferior.",
+          "rationale": [
+            "The primary confidence interval clears the frozen minimum effect.",
+            "Every guardrail confidence interval clears its frozen harm tolerance."
+          ],
+          "blocking_diagnostics": []
+        },
+        "critic": {
+          "status": "clear",
+          "checks": [
+            {
+              "code": "placebo_date",
+              "status": "pass",
+              "title": "Pre-period placebo intervention",
+              "message": "Estimate a fake intervention using pre-treatment rows only. A non-significant result does not prove identification.",
+              "details": {
+                "treatment_start": 3.0,
+                "metric_name": "outcome",
+                "metric_kind": "continuous",
+                "method": "two_way_fixed_effects_unit_clustered_se",
+                "effect": 0.046386360125940385,
+                "standard_error": 0.05780609410514074,
+                "ci_lower": -0.06831347170247955,
+                "ci_upper": 0.1610861919543603,
+                "p_value": 0.4242162510972304,
+                "control_mean": 10.656567057702095,
+                "treatment_mean": 10.368707816082118,
+                "relative_lift": null,
+                "n_control": 300,
+                "n_treatment": 300,
+                "cuped_applied": false,
+                "details": {
+                  "cluster_degrees_freedom": 99,
+                  "raw_cells": {
+                    "control_pre": 10.281487250754537,
+                    "control_post": 10.656567057702095,
+                    "treatment_pre": 9.947241649008607,
+                    "treatment_post": 10.368707816082118
+                  }
+                }
+              }
+            },
+            {
+              "code": "window_stability",
+              "status": "pass",
+              "title": "Predeclared event windows",
+              "message": "Compare the full post period, first three periods, and last three periods against the same frozen threshold.",
+              "details": {
+                "windows": 3
+              }
+            },
+            {
+              "code": "differential_missingness",
+              "status": "pass",
+              "title": "Required-field attrition by arm",
+              "message": "Complete-case removal does not establish ignorability of missing outcomes.",
+              "details": {
+                "gap": 0.0,
+                "threshold": 0.05,
+                "arms": [
+                  {
+                    "arm": "control",
+                    "source_rows": 600,
+                    "excluded_rows": 0,
+                    "analyzed_rows": 600,
+                    "missing_rate": 0.0
+                  },
+                  {
+                    "arm": "treatment",
+                    "source_rows": 600,
+                    "excluded_rows": 0,
+                    "analyzed_rows": 600,
+                    "missing_rate": 0.0
+                  }
+                ]
+              }
+            },
+            {
+              "code": "subgroup_consistency",
+              "status": "pass",
+              "title": "Exploratory subgroup consistency",
+              "message": "Subgroup results use Holm adjustment. A detected difference motivates a new targeted study; it is not a subgroup rollout authorization.",
+              "details": {}
+            }
+          ],
+          "windows": [
+            {
+              "label": "All post periods",
+              "metric_name": "outcome",
+              "metric_kind": "continuous",
+              "method": "two_way_fixed_effects_unit_clustered_se",
+              "effect": 1.001653123211816,
+              "standard_error": 0.033626980288369024,
+              "ci_lower": 0.9349298988929718,
+              "ci_upper": 1.06837634753066,
+              "p_value": 3.2101489763777456e-51,
+              "control_mean": 11.360233521496669,
+              "treatment_mean": 12.05083422302553,
+              "relative_lift": null,
+              "n_control": 600,
+              "n_treatment": 600,
+              "cuped_applied": false,
+              "details": {
+                "cluster_degrees_freedom": 99,
+                "raw_cells": {
+                  "control_pre": 10.469027154228316,
+                  "control_post": 11.360233521496669,
+                  "treatment_pre": 10.15797473254536,
+                  "treatment_post": 12.05083422302553
+                }
+              }
+            },
+            {
+              "label": "First three post periods",
+              "metric_name": "outcome",
+              "metric_kind": "continuous",
+              "method": "two_way_fixed_effects_unit_clustered_se",
+              "effect": 1.0236608080813003,
+              "standard_error": 0.042416475671522874,
+              "ci_lower": 0.9394973180273117,
+              "ci_upper": 1.1078242981352888,
+              "p_value": 2.924209669215842e-43,
+              "control_mean": 11.132425793345869,
+              "treatment_mean": 11.845034179744216,
+              "relative_lift": null,
+              "n_control": 450,
+              "n_treatment": 450,
+              "cuped_applied": false,
+              "details": {
+                "cluster_degrees_freedom": 99,
+                "raw_cells": {
+                  "control_pre": 10.469027154228316,
+                  "control_post": 11.132425793345869,
+                  "treatment_pre": 10.15797473254536,
+                  "treatment_post": 11.845034179744216
+                }
+              }
+            },
+            {
+              "label": "Last three post periods",
+              "metric_name": "outcome",
+              "metric_kind": "continuous",
+              "method": "two_way_fixed_effects_unit_clustered_se",
+              "effect": 0.9796454383423234,
+              "standard_error": 0.04830017996787421,
+              "ci_lower": 0.8838074024853927,
+              "ci_upper": 1.075483474199254,
+              "p_value": 4.922003934435861e-37,
+              "control_mean": 11.588041249647471,
+              "treatment_mean": 12.256634266306841,
+              "relative_lift": null,
+              "n_control": 450,
+              "n_treatment": 450,
+              "cuped_applied": false,
+              "details": {
+                "cluster_degrees_freedom": 99,
+                "raw_cells": {
+                  "control_pre": 10.469027154228316,
+                  "control_post": 11.588041249647471,
+                  "treatment_pre": 10.15797473254536,
+                  "treatment_post": 12.256634266306841
+                }
+              }
+            }
+          ],
+          "base_decision": "go",
+          "final_decision": "go",
+          "policy_version": "critic-1.0",
+          "limitation": "Passing diagnostics does not prove the causal assumptions. Sensitivity checks can flag concerns, not establish absence of bias."
+        },
+        "truth": {
+          "true_effect": 1.0,
+          "known": true,
+          "heterogeneous": false,
+          "note": "Known generator parameter. Heterogeneous subgroup effects are centered around this value."
+        },
+        "trace": [
+          {
+            "tool": "validate_frozen_design",
+            "status": "completed"
+          },
+          {
+            "tool": "profile_data",
+            "status": "completed"
+          },
+          {
+            "tool": "confirm_complete_case_policy",
+            "status": "completed"
+          },
+          {
+            "tool": "validate_identification",
+            "status": "completed"
+          },
+          {
+            "tool": "estimate_did",
+            "status": "completed"
+          },
+          {
+            "tool": "critic_review",
+            "status": "completed"
+          },
+          {
+            "tool": "apply_frozen_decision",
+            "status": "completed"
+          }
+        ]
+      }
+    }
+  ]
+}

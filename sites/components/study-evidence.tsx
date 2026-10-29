@@ -172,17 +172,17 @@ export function ContractEvidence({ evidence }: { evidence: NormalizedEvidence })
         <CardHeader className="border-b border-slate-900/[0.07] bg-slate-900/[0.035] p-6 dark:border-white/10 dark:bg-white/[0.035]">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2 text-xs font-semibold normal-case tracking-normal text-amber-600"><Route className="h-4 w-4" /> Design spec</div>
+              <div className="flex items-center gap-2 text-sm font-semibold normal-case tracking-normal text-amber-600"><Route className="h-4 w-4" /> Design spec</div>
               <CardTitle className="mt-3 text-lg">{formatDesignType(designType)}</CardTitle>
             </div>
-            {Boolean(design.is_frozen ?? true) && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Frozen</span>}
+            {Boolean(design.is_frozen ?? true) && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[14px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Frozen</span>}
           </div>
         </CardHeader>
         <CardContent className="p-6">
           <div>
-            <p className="text-[11px] font-semibold normal-case tracking-normal text-slate-400">{isDid ? "Treatment start" : "Required sample"}</p>
+            <p className="text-[14px] font-semibold normal-case tracking-normal text-slate-400">{isDid ? "Treatment start" : "Required sample"}</p>
             <p className="metric-number mt-1 text-3xl font-semibold">{isDid ? String(design.treatment_start ?? "—") : requiredSample === null ? "—" : Math.round(requiredSample).toLocaleString()}</p>
-            <p className="mt-1 text-xs text-slate-500">{isDid ? "pre-committed intervention boundary" : "total analysis units"}</p>
+            <p className="mt-1 text-sm text-slate-500">{isDid ? "pre-committed intervention boundary" : "total analysis units"}</p>
           </div>
           <div className="mt-6 border-t border-slate-900/[0.07] pt-2 dark:border-white/10">
             <EvidenceRows items={designDetails} />
@@ -213,22 +213,22 @@ export function DataContractEvidence({ evidence }: { evidence: NormalizedEvidenc
       </CardHeader>
       <CardContent>
         <div className="overflow-hidden rounded-xl border border-slate-900/10 dark:border-white/10">
-          <div className="grid grid-cols-[1fr_0.8fr_auto] gap-4 bg-slate-900/[0.04] px-4 py-2.5 tabular-nums text-[11px] font-semibold normal-case tracking-normal text-muted-foreground dark:bg-white/[0.04]">
+          <div className="grid grid-cols-[1fr_0.8fr_auto] gap-4 bg-slate-900/[0.04] px-4 py-2.5 tabular-nums text-[14px] font-semibold normal-case tracking-normal text-muted-foreground dark:bg-white/[0.04]">
             <span>Logical field</span><span>Role / type</span><span>Required</span>
           </div>
           {renderedFields.map((field, index) => {
             const item = typeof field === "string" ? { name: field } : asRecord(field)
             return (
               <div key={`${String(item.name ?? item.logical_name ?? index)}-${index}`} className="grid grid-cols-[1fr_0.8fr_auto] gap-4 border-t border-slate-900/[0.07] px-4 py-3 text-sm dark:border-white/10">
-                <code className="truncate text-xs font-semibold text-slate-800 dark:text-slate-200">{String(item.name ?? item.logical_name ?? item.column ?? `field_${index + 1}`)}</code>
-                <span className="truncate text-xs text-slate-500">{String(item.role ?? item.type ?? item.dtype ?? "value")}</span>
-                {item.required === false ? <span className="text-xs text-slate-400">Optional</span> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                <code className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">{String(item.name ?? item.logical_name ?? item.column ?? `field_${index + 1}`)}</code>
+                <span className="truncate text-sm text-slate-500">{String(item.role ?? item.type ?? item.dtype ?? "value")}</span>
+                {item.required === false ? <span className="text-sm text-slate-400">Optional</span> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
               </div>
             )
           })}
         </div>
         {Object.keys(record).length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
+          <div className="mt-4 flex flex-wrap gap-2 text-sm text-slate-500">
             {record.unit_unique !== undefined && <ContractChip label="Unit unique" value={record.unit_unique} />}
             {record.allow_missing_outcome !== undefined && <ContractChip label="Missing outcome" value={record.allow_missing_outcome ? "allowed" : "blocked"} />}
             {record.metric_window_days !== undefined && <ContractChip label="Metric window" value={`${record.metric_window_days} days`} />}
@@ -266,8 +266,8 @@ export function DiagnosticsEvidence({ evidence }: { evidence: NormalizedEvidence
         <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><FileCode2 className="h-4 w-4 text-slate-500" /> Run summary</CardTitle><CardDescription>Diagnostic counts and the immutable dataset version used by this run.</CardDescription></CardHeader>
         <CardContent>
           <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
-            <div><p className="tabular-nums text-[11px] font-semibold normal-case tracking-normal text-muted-foreground">Passed</p><p className="metric-number mt-1 text-3xl font-semibold text-emerald-700 dark:text-emerald-300">{passed}</p></div>
-            <div><p className="tabular-nums text-[11px] font-semibold normal-case tracking-normal text-muted-foreground">Blocking</p><p className={cn("metric-number mt-1 text-3xl font-semibold", blocking > 0 ? "text-rose-600" : "text-muted-foreground/45")}>{blocking}</p></div>
+            <div><p className="tabular-nums text-[14px] font-semibold normal-case tracking-normal text-muted-foreground">Passed</p><p className="metric-number mt-1 text-3xl font-semibold text-emerald-700 dark:text-emerald-300">{passed}</p></div>
+            <div><p className="tabular-nums text-[14px] font-semibold normal-case tracking-normal text-muted-foreground">Blocking</p><p className={cn("metric-number mt-1 text-3xl font-semibold", blocking > 0 ? "text-rose-600" : "text-muted-foreground/45")}>{blocking}</p></div>
           </div>
           <div className="mt-6 border-t border-slate-900/[0.07] pt-2 dark:border-white/10">
             <EvidenceRows items={[
@@ -304,7 +304,7 @@ export function DecisionEvidence({ evidence }: { evidence: NormalizedEvidence })
             ) : (
               <>
                 <p className="metric-number text-4xl font-semibold">{formatEffect(effect.estimate, metricKind)}</p>
-                <p className="mt-2 tabular-nums text-xs text-slate-500">95% CI {formatInterval(effect.ci_lower, effect.ci_upper, metricKind)}</p>
+                <p className="mt-2 tabular-nums text-sm text-slate-500">95% CI {formatInterval(effect.ci_lower, effect.ci_upper, metricKind)}</p>
                 <div className="mt-6 border-t border-slate-900/[0.07] pt-2 dark:border-white/10">
                   <EvidenceRows items={[
                     { label: "Control", value: formatMetricLevel(control, metricKind), mono: true },
@@ -327,9 +327,9 @@ export function DecisionEvidence({ evidence }: { evidence: NormalizedEvidence })
           <CardContent className="space-y-3">
             {guardrailEffects.map((guardrail, index) => (
               <div key={`${String(guardrail.metric ?? guardrail.name)}-${index}`} className="rounded-xl border border-slate-900/10 p-4 dark:border-white/10">
-                <p className="text-xs font-semibold">{String(guardrail.metric_name ?? guardrail.metric ?? guardrail.name ?? `Guardrail ${index + 1}`)}</p>
+                <p className="text-sm font-semibold">{String(guardrail.metric_name ?? guardrail.metric ?? guardrail.name ?? `Guardrail ${index + 1}`)}</p>
                 <p className="mt-2 tabular-nums text-lg font-semibold">{formatEffect(guardrail.effect ?? guardrail.estimate, String(guardrail.metric_kind ?? guardrail.kind ?? "continuous"))}</p>
-                <p className="mt-1 text-xs text-slate-500">CI {formatInterval(guardrail.ci_lower, guardrail.ci_upper, String(guardrail.metric_kind ?? guardrail.kind ?? "continuous"))}</p>
+                <p className="mt-1 text-sm text-slate-500">CI {formatInterval(guardrail.ci_lower, guardrail.ci_upper, String(guardrail.metric_kind ?? guardrail.kind ?? "continuous"))}</p>
               </div>
             ))}
           </CardContent>
@@ -357,10 +357,10 @@ export function TraceEvidence({ evidence }: { evidence: NormalizedEvidence }) {
                 <span className="absolute -left-[7px] top-0 grid h-3.5 w-3.5 place-items-center rounded-full border-2 border-white bg-slate-500 dark:border-[#1b1e24]" />
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-semibold capitalize">{item.step.replaceAll("_", " ")}</p>
-                  {item.tool && <code className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500 dark:bg-slate-900">{item.tool}</code>}
-                  {item.status && <span className="text-[11px] font-semibold normal-case tracking-normal text-emerald-600">{item.status}</span>}
+                  {item.tool && <code className="rounded bg-slate-100 px-1.5 py-0.5 text-[14px] text-slate-500 dark:bg-slate-900">{item.tool}</code>}
+                  {item.status && <span className="text-[14px] font-semibold normal-case tracking-normal text-emerald-600">{item.status}</span>}
                 </div>
-                {item.summary && <p className="mt-1 text-xs leading-5 text-slate-500">{item.summary}</p>}
+                {item.summary && <p className="mt-1 text-sm leading-5 text-slate-500">{item.summary}</p>}
               </li>
             ))}
           </ol>
@@ -382,9 +382,9 @@ function DiagnosticRow({ item }: { item: DiagnosticCheck }) {
     <div className="flex flex-col gap-3 rounded-xl border border-slate-900/10 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
       <div className="min-w-0">
         <p className="text-sm font-semibold capitalize">{item.name.replaceAll("_", " ")}</p>
-        {item.message && <p className="mt-1 text-xs leading-5 text-slate-500">{item.message}</p>}
+        {item.message && <p className="mt-1 text-sm leading-5 text-slate-500">{item.message}</p>}
       </div>
-      <span className={cn("inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold", view.classes)}><Icon className="h-3.5 w-3.5" />{view.label}</span>
+      <span className={cn("inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[14px] font-semibold", view.classes)}><Icon className="h-3.5 w-3.5" />{view.label}</span>
     </div>
   )
 }
@@ -408,8 +408,8 @@ function DecisionMemo({ status, decision, memo }: { status: string; decision: Un
     <Card className={cn("border shadow-none", tone)}>
       <CardHeader>
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-xs font-semibold normal-case tracking-normal"><Icon className="h-4 w-4" /> Decision memo</div>
-          <span className="rounded-full bg-white/60 px-2.5 py-1 text-[11px] font-semibold dark:bg-black/20">Policy evaluated</span>
+          <div className="flex items-center gap-2 text-sm font-semibold normal-case tracking-normal"><Icon className="h-4 w-4" /> Decision memo</div>
+          <span className="rounded-full bg-white/60 px-2.5 py-1 text-[14px] font-semibold dark:bg-black/20">Policy evaluated</span>
         </div>
         <CardTitle className="text-2xl">{label}</CardTitle>
         <CardDescription className="text-current opacity-70">{String(decision.summary ?? memo ?? "Run the evidence checks to produce a recommendation.")}</CardDescription>
@@ -425,16 +425,16 @@ function DecisionMemo({ status, decision, memo }: { status: string; decision: Un
 }
 
 function MemoList({ label, values }: { label: string; values: unknown[] }) {
-  return <div><p className="text-[11px] font-semibold normal-case tracking-normal opacity-60">{label}</p><ul className="mt-2 space-y-1.5">{values.map((value, index) => <li key={index} className="flex gap-2"><span aria-hidden>•</span><span>{typeof value === "string" ? value : JSON.stringify(value)}</span></li>)}</ul></div>
+  return <div><p className="text-[14px] font-semibold normal-case tracking-normal opacity-60">{label}</p><ul className="mt-2 space-y-1.5">{values.map((value, index) => <li key={index} className="flex gap-2"><span aria-hidden>•</span><span>{typeof value === "string" ? value : JSON.stringify(value)}</span></li>)}</ul></div>
 }
 
 function EmptyEvidence({ icon: Icon, title, description }: { icon: typeof CircleDashed; title: string; description: string }) {
-  return <div className="rounded-xl border border-dashed border-slate-900/10 px-5 py-8 text-center dark:border-white/10"><Icon className="mx-auto h-5 w-5 text-slate-400" /><p className="mt-3 text-sm font-semibold">{title}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>
+  return <div className="rounded-xl border border-dashed border-slate-900/10 px-5 py-8 text-center dark:border-white/10"><Icon className="mx-auto h-5 w-5 text-slate-400" /><p className="mt-3 text-sm font-semibold">{title}</p><p className="mt-1 text-sm text-slate-500">{description}</p></div>
 }
 
 function EvidenceField({ label, value, mono = false }: { label: string; value: unknown; mono?: boolean }) {
   const display = value === undefined || value === null || value === "" ? "—" : typeof value === "object" ? JSON.stringify(value) : String(value)
-  return <div className="min-w-0"><p className="text-[11px] font-semibold normal-case tracking-normal text-slate-400">{label}</p><p className={cn("mt-1.5 break-words text-sm text-slate-700 dark:text-slate-200", mono && "tabular-nums text-xs")}>{display}</p></div>
+  return <div className="min-w-0"><p className="text-[14px] font-semibold normal-case tracking-normal text-slate-400">{label}</p><p className={cn("mt-1.5 break-words text-sm text-slate-700 dark:text-slate-200", mono && "tabular-nums text-sm")}>{display}</p></div>
 }
 
 type EvidenceItem = { label: string; value: unknown; mono?: boolean }

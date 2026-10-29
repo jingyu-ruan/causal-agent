@@ -1,0 +1,782 @@
+[
+  {
+    "id": "rct-go",
+    "title": "A better onboarding",
+    "question": "Does guided onboarding increase activation value without increasing support cost?",
+    "method": "rct",
+    "expected": "go",
+    "theme": "Successful experiment",
+    "lesson": "An effect clears the business threshold and the guardrail remains safe.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 1200,
+      "true_effect": 0.7,
+      "confounding": 0.4,
+      "noise": 1,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0,
+      "guardrail_effect": 0,
+      "nonparallel_trend": 0,
+      "heterogeneous": false,
+      "overlap_failure": false,
+      "imbalance": false,
+      "duplicate_units": false
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "context"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "context"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        }
+      ],
+      "confirmed": false
+    }
+  },
+  {
+    "id": "rct-hold",
+    "title": "A promising but small lift",
+    "question": "Is a small engagement lift enough to justify rolling out the redesign?",
+    "method": "rct",
+    "expected": "hold",
+    "theme": "Business significance",
+    "lesson": "A positive point estimate is not enough to clear the frozen minimum effect.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 1200,
+      "true_effect": 0.12,
+      "confounding": 0.4,
+      "noise": 1,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0,
+      "guardrail_effect": 0,
+      "nonparallel_trend": 0,
+      "heterogeneous": false,
+      "overlap_failure": false,
+      "imbalance": false,
+      "duplicate_units": false
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "context"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "context"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        }
+      ],
+      "confirmed": false
+    }
+  },
+  {
+    "id": "rct-stop",
+    "title": "Growth at a cost",
+    "question": "Should a conversion improvement ship if it increases support cost?",
+    "method": "rct",
+    "expected": "stop",
+    "theme": "Guardrail harm",
+    "lesson": "The primary outcome improves, but the guardrail blocks rollout.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 1200,
+      "true_effect": 0.7,
+      "confounding": 0.4,
+      "noise": 1,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0,
+      "guardrail_effect": 0.9,
+      "nonparallel_trend": 0,
+      "heterogeneous": false,
+      "overlap_failure": false,
+      "imbalance": false,
+      "duplicate_units": false
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "context"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "context"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        }
+      ],
+      "confirmed": false
+    }
+  },
+  {
+    "id": "rct-attrition",
+    "title": "The missing customers",
+    "question": "Can we trust a lift when more treated users lose their outcome records?",
+    "method": "rct",
+    "expected": "insufficient_evidence",
+    "theme": "Differential missingness",
+    "lesson": "Differential attrition changes the analyzed allocation and fails the SRM gate; complete-case removal does not repair it.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 2000,
+      "true_effect": 0.7,
+      "confounding": 0.4,
+      "noise": 1,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0.2,
+      "guardrail_effect": 0,
+      "nonparallel_trend": 0,
+      "heterogeneous": false,
+      "overlap_failure": false,
+      "imbalance": false,
+      "duplicate_units": false
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "context"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "context"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        }
+      ],
+      "confirmed": false
+    }
+  },
+  {
+    "id": "rct-imbalance",
+    "title": "Randomization under suspicion",
+    "question": "Is the apparent uplift credible when baseline engagement differs by assignment?",
+    "method": "rct",
+    "expected": "hold",
+    "theme": "Covariate imbalance",
+    "lesson": "Balanced group counts can coexist with an imbalanced pre-treatment covariate.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 1200,
+      "true_effect": 0.5,
+      "confounding": 0.8,
+      "noise": 1,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0,
+      "guardrail_effect": 0,
+      "nonparallel_trend": 0,
+      "heterogeneous": false,
+      "overlap_failure": false,
+      "imbalance": true,
+      "duplicate_units": false
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "context"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "context"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        }
+      ],
+      "confirmed": false
+    }
+  },
+  {
+    "id": "rct-heterogeneity",
+    "title": "One average, three audiences",
+    "question": "Does a positive overall effect hide a harmed audience?",
+    "method": "rct",
+    "expected": "hold",
+    "theme": "Treatment heterogeneity",
+    "lesson": "Exploratory subgroup differences require a targeted follow-up study.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 2400,
+      "true_effect": 0.4,
+      "confounding": 0.4,
+      "noise": 1,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0,
+      "guardrail_effect": 0,
+      "nonparallel_trend": 0,
+      "heterogeneous": true,
+      "overlap_failure": false,
+      "imbalance": false,
+      "duplicate_units": false
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "context"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "context"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        }
+      ],
+      "confirmed": false
+    }
+  },
+  {
+    "id": "broken-grain",
+    "title": "A duplicated participant",
+    "question": "Should an analysis proceed when a participant has conflicting outcome rows?",
+    "method": "rct",
+    "expected": "insufficient_evidence",
+    "theme": "Data integrity",
+    "lesson": "A non-identical duplicate cannot be silently deduplicated.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 1200,
+      "true_effect": 0.6,
+      "confounding": 0.4,
+      "noise": 1,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0,
+      "guardrail_effect": 0,
+      "nonparallel_trend": 0,
+      "heterogeneous": false,
+      "overlap_failure": false,
+      "imbalance": false,
+      "duplicate_units": true
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "context"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "context"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        }
+      ],
+      "confirmed": false
+    }
+  },
+  {
+    "id": "did-go",
+    "title": "A regional rollout",
+    "question": "Did a regional rollout increase customer value beyond the common time trend?",
+    "method": "did",
+    "expected": "go",
+    "theme": "Parallel trends",
+    "lesson": "Compare pre-trends, placebo dates, and post-period windows.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 1200,
+      "true_effect": 1.0,
+      "confounding": 1.2,
+      "noise": 0.3,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0,
+      "guardrail_effect": 0,
+      "nonparallel_trend": 0,
+      "heterogeneous": false,
+      "overlap_failure": false,
+      "imbalance": false,
+      "duplicate_units": false
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "context"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "context"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        }
+      ],
+      "confirmed": false
+    }
+  },
+  {
+    "id": "did-pretrend",
+    "title": "The trend that came first",
+    "question": "Is the post-rollout increase causal when treated regions were already improving?",
+    "method": "did",
+    "expected": "insufficient_evidence",
+    "theme": "Identification failure",
+    "lesson": "A large DiD coefficient cannot rescue a rejected pre-trend gate.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 1200,
+      "true_effect": 0.7,
+      "confounding": 1.2,
+      "noise": 0.3,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0,
+      "guardrail_effect": 0,
+      "nonparallel_trend": 0.3,
+      "heterogeneous": false,
+      "overlap_failure": false,
+      "imbalance": false,
+      "duplicate_units": false
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "context"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "context"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        }
+      ],
+      "confirmed": false
+    }
+  },
+  {
+    "id": "aipw-confounding",
+    "title": "Who gets the promotion?",
+    "question": "Does a targeted promotion work, or are already-engaged customers more likely to receive it?",
+    "method": "aipw",
+    "expected": "go",
+    "theme": "Confounding adjustment",
+    "lesson": "Compare naive differences with cross-fitted AIPW and balance diagnostics.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 2400,
+      "true_effect": 0.6,
+      "confounding": 1.0,
+      "noise": 1,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0,
+      "guardrail_effect": 0,
+      "nonparallel_trend": 0,
+      "heterogeneous": false,
+      "overlap_failure": false,
+      "imbalance": false,
+      "duplicate_units": false
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "confounder"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "confounder"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "treatment"
+        },
+        {
+          "source": "age_score",
+          "target": "treatment"
+        }
+      ],
+      "confirmed": false
+    }
+  },
+  {
+    "id": "aipw-null",
+    "title": "An association without an effect",
+    "question": "Can an apparent promotion lift disappear after adjusting for prior engagement?",
+    "method": "aipw",
+    "expected": "hold",
+    "theme": "Correlation versus causation",
+    "lesson": "Known zero treatment effect despite a positive naive association.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 2400,
+      "true_effect": 0.0,
+      "confounding": 1.0,
+      "noise": 1,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0,
+      "guardrail_effect": 0,
+      "nonparallel_trend": 0,
+      "heterogeneous": false,
+      "overlap_failure": false,
+      "imbalance": false,
+      "duplicate_units": false
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "confounder"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "confounder"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "treatment"
+        },
+        {
+          "source": "age_score",
+          "target": "treatment"
+        }
+      ],
+      "confirmed": false
+    }
+  },
+  {
+    "id": "aipw-overlap",
+    "title": "No comparable customers",
+    "question": "Can we estimate a promotion effect if treatment is almost determined by prior engagement?",
+    "method": "aipw",
+    "expected": "insufficient_evidence",
+    "theme": "Positivity failure",
+    "lesson": "Doubly robust estimation cannot fix a lack of overlap.",
+    "simulation": {
+      "seed": 42,
+      "sample_size": 2400,
+      "true_effect": 0.6,
+      "confounding": 1.2,
+      "noise": 1,
+      "missing_rate": 0,
+      "treatment_missing_extra": 0,
+      "guardrail_effect": 0,
+      "nonparallel_trend": 0,
+      "heterogeneous": false,
+      "overlap_failure": true,
+      "imbalance": false,
+      "duplicate_units": false
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment"
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome"
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "confounder"
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "confounder"
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "treatment"
+        },
+        {
+          "source": "age_score",
+          "target": "treatment"
+        }
+      ],
+      "confirmed": false
+    }
+  }
+]

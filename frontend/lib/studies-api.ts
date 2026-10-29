@@ -119,6 +119,7 @@ export interface StudyRecord {
 }
 
 export interface AnalyzeOptions {
+  explore_effects?: boolean
   transformation_log: Array<{
     sequence: number
     operation: string
@@ -186,6 +187,7 @@ export interface ColumnMappingPayload {
 }
 
 export interface SyntheticDatasetParameters {
+  scenario?: import("./scenario-lab").LabScenario
   baseline_value?: number
   outcome_standard_deviation?: number
 }

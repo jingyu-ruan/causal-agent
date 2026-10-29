@@ -26,7 +26,7 @@ const CONVERSATIONS_API = `${API_BASE_URL}/api/conversations`
 const WORKSPACE_KEY = "causal-agent-workspace-key"
 let volatileWorkspaceKey = ""
 
-function workspaceKey(): string {
+export function workspaceKey(): string {
   if (volatileWorkspaceKey) return volatileWorkspaceKey
   try {
     const existing = window.localStorage.getItem(WORKSPACE_KEY)

@@ -1,0 +1,626 @@
+{
+  "id": "reference-rct-imbalance",
+  "design": {
+    "title": "Randomization under suspicion",
+    "question": "Is the apparent uplift credible when baseline engagement differs by assignment?",
+    "method": "rct",
+    "minimum_effect": 0.2,
+    "harm_tolerance": 0.5,
+    "covariates": [
+      "engagement",
+      "age_score"
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment",
+          "observed": true
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome",
+          "observed": true
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "context",
+          "observed": true
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "context",
+          "observed": true
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        }
+      ],
+      "confirmed": true
+    },
+    "retrospective": false,
+    "exploratory": false,
+    "balance_threshold": 0.2,
+    "missingness_gap_threshold": 0.05,
+    "overlap_tail_threshold": 0.1,
+    "treatment_start": 6,
+    "spec_hash": "68a2dc59302b40fdbd3db9ae105b26e79129c7ed5568bc4e131983cfb10a05b0"
+  },
+  "parent_id": null,
+  "branch_reason": null,
+  "case_id": "rct-imbalance",
+  "created_at": "2026-10-29T00:00:00Z",
+  "reference_snapshot": true,
+  "runs": [
+    {
+      "id": "reference-run-rct-imbalance",
+      "project_id": "reference-rct-imbalance",
+      "created_at": "2026-10-29T00:00:00Z",
+      "source_kind": "synthetic_reference",
+      "filename": "rct-imbalance.csv",
+      "source_sha256": "9161941b27199909a2928685467219f742dbbcee7e9c7f6c7bff1d2570dad1e2",
+      "simulation": {
+        "seed": 42,
+        "sample_size": 1200,
+        "true_effect": 0.5,
+        "confounding": 0.8,
+        "noise": 1,
+        "missing_rate": 0,
+        "treatment_missing_extra": 0,
+        "guardrail_effect": 0,
+        "nonparallel_trend": 0,
+        "heterogeneous": false,
+        "overlap_failure": false,
+        "imbalance": true,
+        "duplicate_units": false
+      },
+      "result": {
+        "design": {
+          "title": "Randomization under suspicion",
+          "question": "Is the apparent uplift credible when baseline engagement differs by assignment?",
+          "method": "rct",
+          "minimum_effect": 0.2,
+          "harm_tolerance": 0.5,
+          "covariates": [
+            "engagement",
+            "age_score"
+          ],
+          "graph": {
+            "nodes": [
+              {
+                "id": "treatment",
+                "label": "Treatment",
+                "role": "treatment",
+                "observed": true
+              },
+              {
+                "id": "outcome",
+                "label": "Outcome",
+                "role": "outcome",
+                "observed": true
+              },
+              {
+                "id": "engagement",
+                "label": "Prior engagement",
+                "role": "context",
+                "observed": true
+              },
+              {
+                "id": "age_score",
+                "label": "Account tenure",
+                "role": "context",
+                "observed": true
+              }
+            ],
+            "edges": [
+              {
+                "source": "treatment",
+                "target": "outcome"
+              },
+              {
+                "source": "engagement",
+                "target": "outcome"
+              },
+              {
+                "source": "age_score",
+                "target": "outcome"
+              }
+            ],
+            "confirmed": true
+          },
+          "retrospective": false,
+          "exploratory": false,
+          "balance_threshold": 0.2,
+          "missingness_gap_threshold": 0.05,
+          "overlap_tail_threshold": 0.1,
+          "treatment_start": 6,
+          "spec_hash": "68a2dc59302b40fdbd3db9ae105b26e79129c7ed5568bc4e131983cfb10a05b0"
+        },
+        "profile": {
+          "row_count": 1200,
+          "columns": [
+            "unit_id",
+            "treatment",
+            "outcome",
+            "guardrail",
+            "engagement",
+            "age_score",
+            "segment"
+          ],
+          "missing_columns": [],
+          "invalid_numeric": {},
+          "unknown_groups": [],
+          "missing_rows": 0,
+          "duplicate_grain_rows": 0,
+          "arms": [
+            {
+              "arm": "control",
+              "source_rows": 600,
+              "excluded_rows": 0,
+              "analyzed_rows": 600,
+              "missing_rate": 0.0
+            },
+            {
+              "arm": "treatment",
+              "source_rows": 600,
+              "excluded_rows": 0,
+              "analyzed_rows": 600,
+              "missing_rate": 0.0
+            }
+          ],
+          "preview": [
+            {
+              "unit_id": "user_000000",
+              "treatment": "control",
+              "outcome": 10.2695753705,
+              "guardrail": 2.2543619868,
+              "engagement": 0.3047170798,
+              "age_score": -1.0399841062,
+              "segment": "Returning"
+            },
+            {
+              "unit_id": "user_000001",
+              "treatment": "treatment",
+              "outcome": 13.387970822,
+              "guardrail": 1.8731257233,
+              "engagement": 1.6504511958,
+              "age_score": 0.9405647164,
+              "segment": "Power"
+            },
+            {
+              "unit_id": "user_000002",
+              "treatment": "control",
+              "outcome": 8.5293638626,
+              "guardrail": 2.245421028,
+              "engagement": -1.9510351887,
+              "age_score": -1.3021795069,
+              "segment": "New"
+            },
+            {
+              "unit_id": "user_000003",
+              "treatment": "control",
+              "outcome": 10.8533106286,
+              "guardrail": 1.5807008357,
+              "engagement": 0.1278404032,
+              "age_score": -0.3162425923,
+              "segment": "Returning"
+            },
+            {
+              "unit_id": "user_000004",
+              "treatment": "treatment",
+              "outcome": 9.6284435768,
+              "guardrail": 1.7112582189,
+              "engagement": 0.8831988425,
+              "age_score": -0.8530439276,
+              "segment": "Power"
+            },
+            {
+              "unit_id": "user_000005",
+              "treatment": "treatment",
+              "outcome": 13.4260740543,
+              "guardrail": 2.0999427596,
+              "engagement": 1.7793979749,
+              "age_score": 0.7777919354,
+              "segment": "Power"
+            },
+            {
+              "unit_id": "user_000006",
+              "treatment": "treatment",
+              "outcome": 10.9837520469,
+              "guardrail": 1.3525251012,
+              "engagement": 0.9660306976,
+              "age_score": 1.127241207,
+              "segment": "Power"
+            },
+            {
+              "unit_id": "user_000007",
+              "treatment": "treatment",
+              "outcome": 11.4239030079,
+              "guardrail": 1.9888517645,
+              "engagement": 1.3675093423,
+              "age_score": -0.8592924629,
+              "segment": "Power"
+            }
+          ],
+          "policy": "Only confirmed complete-case removal is supported. Primary outcomes are never imputed. Conflicting duplicate units block analysis."
+        },
+        "dataset": {
+          "sha256": "9161941b27199909a2928685467219f742dbbcee7e9c7f6c7bff1d2570dad1e2",
+          "row_count": 1200,
+          "source_rows": 1200,
+          "excluded_rows": 0
+        },
+        "primary_estimate": {
+          "metric_name": "outcome",
+          "metric_kind": "continuous",
+          "method": "welch_t",
+          "effect": 1.230912732841567,
+          "standard_error": 0.07808767671139014,
+          "ci_lower": 1.0777088340660579,
+          "ci_upper": 1.384116631617076,
+          "p_value": 5.181058532858263e-51,
+          "control_mean": 9.933694633604734,
+          "treatment_mean": 11.164607366446301,
+          "relative_lift": 0.12391288218962435,
+          "n_control": 600,
+          "n_treatment": 600,
+          "cuped_applied": false,
+          "details": {}
+        },
+        "guardrail_estimate": {
+          "metric_name": "guardrail",
+          "metric_kind": "continuous",
+          "method": "welch_t",
+          "effect": -0.0271668241517371,
+          "standard_error": 0.017270163101239893,
+          "ci_lower": -0.06104998814690326,
+          "ci_upper": 0.0067163398434290575,
+          "p_value": 0.1159716247813018,
+          "control_mean": 2.010452870845285,
+          "treatment_mean": 1.983286046693548,
+          "relative_lift": -0.013512788360124523,
+          "n_control": 600,
+          "n_treatment": 600,
+          "cuped_applied": false,
+          "details": {}
+        },
+        "naive_estimate": {
+          "metric_name": "outcome",
+          "metric_kind": "continuous",
+          "method": "naive_welch_difference",
+          "effect": 1.230912732841567,
+          "standard_error": 0.07808767671139014,
+          "ci_lower": 1.0777087870569972,
+          "ci_upper": 1.3841166786261367,
+          "p_value": 5.19693701393416e-51,
+          "control_mean": 9.933694633604734,
+          "treatment_mean": 11.164607366446301,
+          "n_control": 600,
+          "n_treatment": 600
+        },
+        "observational": null,
+        "diagnostics": [
+          {
+            "code": "column_mapping",
+            "status": "pass",
+            "message": "All required logical roles have column mappings.",
+            "details": {}
+          },
+          {
+            "code": "required_columns",
+            "status": "pass",
+            "message": "All mapped columns are present in the dataset.",
+            "details": {}
+          },
+          {
+            "code": "non_empty_dataset",
+            "status": "pass",
+            "message": "The dataset contains observations.",
+            "details": {}
+          },
+          {
+            "code": "missing_required_values",
+            "status": "pass",
+            "message": "Required analysis fields contain no missing values.",
+            "details": {}
+          },
+          {
+            "code": "numeric_metric_values",
+            "status": "pass",
+            "message": "All outcome metrics are numeric.",
+            "details": {}
+          },
+          {
+            "code": "finite_metric_values",
+            "status": "pass",
+            "message": "All outcome metrics contain finite values.",
+            "details": {}
+          },
+          {
+            "code": "binary_metric_values",
+            "status": "pass",
+            "message": "All binary metrics contain only 0/1 values.",
+            "details": {}
+          },
+          {
+            "code": "treatment_values",
+            "status": "pass",
+            "message": "Treatment values match the frozen design.",
+            "details": {}
+          },
+          {
+            "code": "transformation_lineage",
+            "status": "pass",
+            "message": "The transformation log terminates at the analyzed dataset row count.",
+            "details": {
+              "final_logged_rows": 1200,
+              "analyzed_rows": 1200
+            }
+          },
+          {
+            "code": "unit_grain",
+            "status": "pass",
+            "message": "Each randomized unit appears exactly once.",
+            "details": {}
+          },
+          {
+            "code": "sample_ratio_mismatch",
+            "status": "pass",
+            "message": "Observed allocation matches the frozen allocation.",
+            "details": {
+              "observed": {
+                "control": 600,
+                "treatment": 600
+              },
+              "expected": {
+                "control": 600.0,
+                "treatment": 600.0
+              },
+              "p_value": 1.0,
+              "threshold": 0.001
+            }
+          },
+          {
+            "code": "group_sample_size",
+            "status": "pass",
+            "message": "Both groups satisfy the minimum analysis size.",
+            "details": {
+              "counts": {
+                "control": 600,
+                "treatment": 600
+              },
+              "recommended_minimum": 20
+            }
+          },
+          {
+            "code": "planned_sample_size",
+            "status": "pass",
+            "message": "The frozen planned sample size was reached.",
+            "details": {
+              "observed": 1200,
+              "required": 786
+            }
+          }
+        ],
+        "event_study": [],
+        "dimension_analyses": [
+          {
+            "dimension": "segment",
+            "consistency": {
+              "method": "cochran_q_heterogeneity",
+              "statistic": 4.202768514748218,
+              "degrees_freedom": 2,
+              "p_value": 0.12228703430862291,
+              "alpha": 0.05,
+              "consistent": true,
+              "interpretation": "Cochran’s Q did not detect effect heterogeneity across the estimable, mutually exclusive subgroups. This is not proof that effects are identical."
+            },
+            "subgroups": [
+              {
+                "dimension": "segment",
+                "level": "New",
+                "estimate": {
+                  "metric_name": "outcome",
+                  "metric_kind": "continuous",
+                  "method": "welch_t",
+                  "effect": 0.7898368881483915,
+                  "standard_error": 0.1503665782024869,
+                  "ci_lower": 0.4922913550203565,
+                  "ci_upper": 1.0873824212764265,
+                  "p_value": 6.121023787065804e-07,
+                  "control_mean": 9.053176238341706,
+                  "treatment_mean": 9.843013126490098,
+                  "relative_lift": 0.08724417456972736,
+                  "n_control": 199,
+                  "n_treatment": 69,
+                  "cuped_applied": false,
+                  "details": {}
+                },
+                "adjusted_p_value": 1.2242047574131607e-06,
+                "significant": true,
+                "direction": "favorable",
+                "recommendation": "Favorable subgroup signal; use it for monitored rollout prioritization, not as a replacement for the overall decision."
+              },
+              {
+                "dimension": "segment",
+                "level": "Power",
+                "estimate": {
+                  "metric_name": "outcome",
+                  "metric_kind": "continuous",
+                  "method": "welch_t",
+                  "effect": 0.817180265593521,
+                  "standard_error": 0.10453654903089356,
+                  "ci_lower": 0.6116625520399902,
+                  "ci_upper": 1.0226979791470516,
+                  "p_value": 4.9572708153967987e-14,
+                  "control_mean": 10.785576583368357,
+                  "treatment_mean": 11.602756848961878,
+                  "relative_lift": 0.07576602504993886,
+                  "n_control": 185,
+                  "n_treatment": 401,
+                  "cuped_applied": false,
+                  "details": {}
+                },
+                "adjusted_p_value": 1.4871812446190397e-13,
+                "significant": true,
+                "direction": "favorable",
+                "recommendation": "Favorable subgroup signal; use it for monitored rollout prioritization, not as a replacement for the overall decision."
+              },
+              {
+                "dimension": "segment",
+                "level": "Returning",
+                "estimate": {
+                  "metric_name": "outcome",
+                  "metric_kind": "continuous",
+                  "method": "welch_t",
+                  "effect": 0.49925443444764817,
+                  "standard_error": 0.12439846101878595,
+                  "ci_lower": 0.25438877496078866,
+                  "ci_upper": 0.7441200939345076,
+                  "p_value": 7.674188650226164e-05,
+                  "control_mean": 10.015291855600438,
+                  "treatment_mean": 10.514546290048086,
+                  "relative_lift": 0.049849214745396636,
+                  "n_control": 216,
+                  "n_treatment": 130,
+                  "cuped_applied": false,
+                  "details": {}
+                },
+                "adjusted_p_value": 7.674188650226164e-05,
+                "significant": true,
+                "direction": "favorable",
+                "recommendation": "Favorable subgroup signal; use it for monitored rollout prioritization, not as a replacement for the overall decision."
+              }
+            ],
+            "skipped_reason": null
+          }
+        ],
+        "decision": {
+          "status": "hold",
+          "summary": "The effect clears the threshold, but the frozen Critic policy requires review.",
+          "rationale": [
+            "The primary confidence interval clears the frozen minimum effect.",
+            "Every guardrail confidence interval clears its frozen harm tolerance.",
+            "Critic warnings: covariate_balance"
+          ]
+        },
+        "critic": {
+          "status": "review",
+          "checks": [
+            {
+              "code": "covariate_balance",
+              "status": "warn",
+              "title": "Pre-treatment covariate balance",
+              "message": "Standardized mean differences compare baseline covariates across assignment groups.",
+              "details": {
+                "balance": [
+                  {
+                    "covariate": "engagement",
+                    "before": 0.8436478752356292,
+                    "after": null
+                  },
+                  {
+                    "covariate": "age_score",
+                    "before": -0.019862340526711732,
+                    "after": null
+                  }
+                ],
+                "max_smd": 0.8436478752356292,
+                "threshold": 0.2
+              }
+            },
+            {
+              "code": "differential_missingness",
+              "status": "pass",
+              "title": "Required-field attrition by arm",
+              "message": "Complete-case removal does not establish ignorability of missing outcomes.",
+              "details": {
+                "gap": 0.0,
+                "threshold": 0.05,
+                "arms": [
+                  {
+                    "arm": "control",
+                    "source_rows": 600,
+                    "excluded_rows": 0,
+                    "analyzed_rows": 600,
+                    "missing_rate": 0.0
+                  },
+                  {
+                    "arm": "treatment",
+                    "source_rows": 600,
+                    "excluded_rows": 0,
+                    "analyzed_rows": 600,
+                    "missing_rate": 0.0
+                  }
+                ]
+              }
+            },
+            {
+              "code": "subgroup_consistency",
+              "status": "pass",
+              "title": "Exploratory subgroup consistency",
+              "message": "Subgroup results use Holm adjustment. A detected difference motivates a new targeted study; it is not a subgroup rollout authorization.",
+              "details": {}
+            }
+          ],
+          "windows": [],
+          "base_decision": "go",
+          "final_decision": "hold",
+          "policy_version": "critic-1.0",
+          "limitation": "Passing diagnostics does not prove the causal assumptions. Sensitivity checks can flag concerns, not establish absence of bias."
+        },
+        "truth": {
+          "true_effect": 0.5,
+          "known": true,
+          "heterogeneous": false,
+          "note": "Known generator parameter. Heterogeneous subgroup effects are centered around this value."
+        },
+        "trace": [
+          {
+            "tool": "validate_frozen_design",
+            "status": "completed"
+          },
+          {
+            "tool": "profile_data",
+            "status": "completed"
+          },
+          {
+            "tool": "confirm_complete_case_policy",
+            "status": "completed"
+          },
+          {
+            "tool": "validate_identification",
+            "status": "completed"
+          },
+          {
+            "tool": "estimate_rct",
+            "status": "completed"
+          },
+          {
+            "tool": "critic_review",
+            "status": "completed"
+          },
+          {
+            "tool": "apply_frozen_decision",
+            "status": "completed"
+          }
+        ]
+      }
+    }
+  ]
+}

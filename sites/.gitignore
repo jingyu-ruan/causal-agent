@@ -43,3 +43,10 @@ yarn-error.log*
 
 # OS metadata
 .DS_Store
+
+/node_modules
+
+# Generated standalone report runtime
+/public/report-runtime.js
+
+/public/report-runtime.css

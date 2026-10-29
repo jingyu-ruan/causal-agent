@@ -1,0 +1,524 @@
+{
+  "id": "reference-aipw-overlap",
+  "design": {
+    "title": "No comparable customers",
+    "question": "Can we estimate a promotion effect if treatment is almost determined by prior engagement?",
+    "method": "aipw",
+    "minimum_effect": 0.2,
+    "harm_tolerance": 0.5,
+    "covariates": [
+      "engagement",
+      "age_score"
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "id": "treatment",
+          "label": "Treatment",
+          "role": "treatment",
+          "observed": true
+        },
+        {
+          "id": "outcome",
+          "label": "Outcome",
+          "role": "outcome",
+          "observed": true
+        },
+        {
+          "id": "engagement",
+          "label": "Prior engagement",
+          "role": "confounder",
+          "observed": true
+        },
+        {
+          "id": "age_score",
+          "label": "Account tenure",
+          "role": "confounder",
+          "observed": true
+        }
+      ],
+      "edges": [
+        {
+          "source": "treatment",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "outcome"
+        },
+        {
+          "source": "age_score",
+          "target": "outcome"
+        },
+        {
+          "source": "engagement",
+          "target": "treatment"
+        },
+        {
+          "source": "age_score",
+          "target": "treatment"
+        }
+      ],
+      "confirmed": true
+    },
+    "retrospective": true,
+    "exploratory": false,
+    "balance_threshold": 0.2,
+    "missingness_gap_threshold": 0.05,
+    "overlap_tail_threshold": 0.1,
+    "treatment_start": 6,
+    "spec_hash": "749f2ef2f111ad56a9bc235eac12f94521875840cec6845b4d03946715c48bbc"
+  },
+  "parent_id": null,
+  "branch_reason": null,
+  "case_id": "aipw-overlap",
+  "created_at": "2026-10-29T00:00:00Z",
+  "reference_snapshot": true,
+  "runs": [
+    {
+      "id": "reference-run-aipw-overlap",
+      "project_id": "reference-aipw-overlap",
+      "created_at": "2026-10-29T00:00:00Z",
+      "source_kind": "synthetic_reference",
+      "filename": "aipw-overlap.csv",
+      "source_sha256": "481e8eec68856ea7eb82cb8407bf2f79052ecb6c7f902e2507bc460ea6b0a3db",
+      "simulation": {
+        "seed": 42,
+        "sample_size": 2400,
+        "true_effect": 0.6,
+        "confounding": 1.2,
+        "noise": 1,
+        "missing_rate": 0,
+        "treatment_missing_extra": 0,
+        "guardrail_effect": 0,
+        "nonparallel_trend": 0,
+        "heterogeneous": false,
+        "overlap_failure": true,
+        "imbalance": false,
+        "duplicate_units": false
+      },
+      "result": {
+        "design": {
+          "title": "No comparable customers",
+          "question": "Can we estimate a promotion effect if treatment is almost determined by prior engagement?",
+          "method": "aipw",
+          "minimum_effect": 0.2,
+          "harm_tolerance": 0.5,
+          "covariates": [
+            "engagement",
+            "age_score"
+          ],
+          "graph": {
+            "nodes": [
+              {
+                "id": "treatment",
+                "label": "Treatment",
+                "role": "treatment",
+                "observed": true
+              },
+              {
+                "id": "outcome",
+                "label": "Outcome",
+                "role": "outcome",
+                "observed": true
+              },
+              {
+                "id": "engagement",
+                "label": "Prior engagement",
+                "role": "confounder",
+                "observed": true
+              },
+              {
+                "id": "age_score",
+                "label": "Account tenure",
+                "role": "confounder",
+                "observed": true
+              }
+            ],
+            "edges": [
+              {
+                "source": "treatment",
+                "target": "outcome"
+              },
+              {
+                "source": "engagement",
+                "target": "outcome"
+              },
+              {
+                "source": "age_score",
+                "target": "outcome"
+              },
+              {
+                "source": "engagement",
+                "target": "treatment"
+              },
+              {
+                "source": "age_score",
+                "target": "treatment"
+              }
+            ],
+            "confirmed": true
+          },
+          "retrospective": true,
+          "exploratory": false,
+          "balance_threshold": 0.2,
+          "missingness_gap_threshold": 0.05,
+          "overlap_tail_threshold": 0.1,
+          "treatment_start": 6,
+          "spec_hash": "749f2ef2f111ad56a9bc235eac12f94521875840cec6845b4d03946715c48bbc"
+        },
+        "profile": {
+          "row_count": 2400,
+          "columns": [
+            "unit_id",
+            "treatment",
+            "outcome",
+            "guardrail",
+            "engagement",
+            "age_score",
+            "segment"
+          ],
+          "missing_columns": [],
+          "invalid_numeric": {},
+          "unknown_groups": [],
+          "missing_rows": 0,
+          "duplicate_grain_rows": 0,
+          "arms": [
+            {
+              "arm": "control",
+              "source_rows": 1198,
+              "excluded_rows": 0,
+              "analyzed_rows": 1198,
+              "missing_rate": 0.0
+            },
+            {
+              "arm": "treatment",
+              "source_rows": 1202,
+              "excluded_rows": 0,
+              "analyzed_rows": 1202,
+              "missing_rate": 0.0
+            }
+          ],
+          "preview": [
+            {
+              "unit_id": "user_000000",
+              "treatment": "control",
+              "outcome": 8.9356295534,
+              "guardrail": 2.0001974625,
+              "engagement": 0.3047170798,
+              "age_score": -1.0399841062,
+              "segment": "Returning"
+            },
+            {
+              "unit_id": "user_000001",
+              "treatment": "treatment",
+              "outcome": 12.879885301,
+              "guardrail": 1.8101316064,
+              "engagement": 0.7504511958,
+              "age_score": 0.9405647164,
+              "segment": "Power"
+            },
+            {
+              "unit_id": "user_000002",
+              "treatment": "control",
+              "outcome": 6.7967057408,
+              "guardrail": 1.8325739001,
+              "engagement": -1.9510351887,
+              "age_score": -1.3021795069,
+              "segment": "New"
+            },
+            {
+              "unit_id": "user_000003",
+              "treatment": "treatment",
+              "outcome": 10.1554913381,
+              "guardrail": 2.2955761728,
+              "engagement": 0.1278404032,
+              "age_score": -0.3162425923,
+              "segment": "Returning"
+            },
+            {
+              "unit_id": "user_000004",
+              "treatment": "control",
+              "outcome": 11.162481616,
+              "guardrail": 2.3078468842,
+              "engagement": -0.0168011575,
+              "age_score": -0.8530439276,
+              "segment": "Returning"
+            },
+            {
+              "unit_id": "user_000005",
+              "treatment": "treatment",
+              "outcome": 12.6105748902,
+              "guardrail": 1.5059322554,
+              "engagement": 0.8793979749,
+              "age_score": 0.7777919354,
+              "segment": "Power"
+            },
+            {
+              "unit_id": "user_000006",
+              "treatment": "treatment",
+              "outcome": 12.215846878,
+              "guardrail": 1.7545491446,
+              "engagement": 0.0660306976,
+              "age_score": 1.127241207,
+              "segment": "Returning"
+            },
+            {
+              "unit_id": "user_000007",
+              "treatment": "treatment",
+              "outcome": 11.1662846588,
+              "guardrail": 1.8607986839,
+              "engagement": 0.4675093423,
+              "age_score": -0.8592924629,
+              "segment": "Power"
+            }
+          ],
+          "policy": "Only confirmed complete-case removal is supported. Primary outcomes are never imputed. Conflicting duplicate units block analysis."
+        },
+        "dataset": {
+          "sha256": "481e8eec68856ea7eb82cb8407bf2f79052ecb6c7f902e2507bc460ea6b0a3db",
+          "row_count": 2400,
+          "source_rows": 2400,
+          "excluded_rows": 0
+        },
+        "primary_estimate": {
+          "metric_name": "outcome",
+          "metric_kind": "continuous",
+          "method": "cross_fitted_aipw_ate",
+          "effect": 0.47618551356062644,
+          "standard_error": 0.06866770123072012,
+          "ci_lower": 0.34159929224725827,
+          "ci_upper": 0.6107717348739946,
+          "p_value": 4.072684137933348e-12,
+          "control_mean": 8.908406658710064,
+          "treatment_mean": 11.560116730179937,
+          "n_control": 1198,
+          "n_treatment": 1202
+        },
+        "guardrail_estimate": {
+          "metric_name": "guardrail",
+          "metric_kind": "continuous",
+          "method": "cross_fitted_aipw_ate",
+          "effect": 0.05782850185027944,
+          "standard_error": 0.02580911491574957,
+          "ci_lower": 0.0072435661425547734,
+          "ci_upper": 0.10841343755800412,
+          "p_value": 0.025050492126817658,
+          "control_mean": 1.9873607451038064,
+          "treatment_mean": 2.0038587138015895,
+          "n_control": 1198,
+          "n_treatment": 1202
+        },
+        "naive_estimate": {
+          "metric_name": "outcome",
+          "metric_kind": "continuous",
+          "method": "naive_welch_difference",
+          "effect": 2.651710071469873,
+          "standard_error": 0.05368808274849482,
+          "ci_lower": 2.546430135642506,
+          "ci_upper": 2.75699000729724,
+          "p_value": 0.0,
+          "control_mean": 8.908406658710064,
+          "treatment_mean": 11.560116730179937,
+          "n_control": 1198,
+          "n_treatment": 1202
+        },
+        "observational": {
+          "tail_fraction": 0.7395833333333334,
+          "clipped_fraction": 0.6166666666666667,
+          "effective_sample_size": 263.38564245716134,
+          "balance": [
+            {
+              "covariate": "engagement",
+              "before": 1.9170793715494854,
+              "after": 1.1272516051406931
+            },
+            {
+              "covariate": "age_score",
+              "before": 0.8235269005485034,
+              "after": 0.35304123463759707
+            }
+          ],
+          "histogram": [
+            {
+              "bin": "0.0–0.1",
+              "control": 956,
+              "treatment": 11
+            },
+            {
+              "bin": "0.1–0.2",
+              "control": 61,
+              "treatment": 13
+            },
+            {
+              "bin": "0.2–0.3",
+              "control": 40,
+              "treatment": 11
+            },
+            {
+              "bin": "0.3–0.4",
+              "control": 48,
+              "treatment": 19
+            },
+            {
+              "bin": "0.4–0.5",
+              "control": 26,
+              "treatment": 17
+            },
+            {
+              "bin": "0.5–0.6",
+              "control": 15,
+              "treatment": 27
+            },
+            {
+              "bin": "0.6–0.7",
+              "control": 15,
+              "treatment": 30
+            },
+            {
+              "bin": "0.7–0.8",
+              "control": 17,
+              "treatment": 46
+            },
+            {
+              "bin": "0.8–0.9",
+              "control": 8,
+              "treatment": 75
+            },
+            {
+              "bin": "0.9–1.0",
+              "control": 12,
+              "treatment": 953
+            }
+          ],
+          "folds": 2,
+          "propensity_clip": [
+            0.01,
+            0.99
+          ],
+          "assumptions": [
+            "No unmeasured confounding given the declared pre-treatment covariates",
+            "Positivity",
+            "Consistency and no interference",
+            "At least one nuisance model correctly specified; inference also needs adequate nuisance convergence"
+          ]
+        },
+        "diagnostics": [
+          {
+            "code": "propensity_overlap",
+            "status": "fail",
+            "message": "Too many participants lack comparable treatment alternatives.",
+            "details": {
+              "tail_fraction": 0.7395833333333334,
+              "threshold": 0.1
+            }
+          },
+          {
+            "code": "observational_identification",
+            "status": "pass",
+            "message": "ATE is conditional on declared no-unmeasured-confounding and positivity assumptions; these cannot be verified from observed data alone."
+          },
+          {
+            "code": "backdoor_adjustment",
+            "status": "pass",
+            "message": "The selected variables block backdoor paths under the supplied DAG."
+          }
+        ],
+        "event_study": [],
+        "dimension_analyses": [],
+        "decision": {
+          "status": "insufficient_evidence",
+          "summary": "Identification or data-quality gates block a causal rollout claim.",
+          "rationale": [
+            "Blocking checks: propensity_overlap"
+          ],
+          "blocking_diagnostics": [
+            "propensity_overlap"
+          ]
+        },
+        "critic": {
+          "status": "blocked",
+          "checks": [
+            {
+              "code": "weighted_balance",
+              "status": "warn",
+              "title": "Balance after weighting",
+              "message": "Review the remaining pre-treatment imbalance after inverse propensity weighting.",
+              "details": {
+                "max_smd": 1.1272516051406931,
+                "threshold": 0.2
+              }
+            },
+            {
+              "code": "differential_missingness",
+              "status": "pass",
+              "title": "Required-field attrition by arm",
+              "message": "Complete-case removal does not establish ignorability of missing outcomes.",
+              "details": {
+                "gap": 0.0,
+                "threshold": 0.05,
+                "arms": [
+                  {
+                    "arm": "control",
+                    "source_rows": 1198,
+                    "excluded_rows": 0,
+                    "analyzed_rows": 1198,
+                    "missing_rate": 0.0
+                  },
+                  {
+                    "arm": "treatment",
+                    "source_rows": 1202,
+                    "excluded_rows": 0,
+                    "analyzed_rows": 1202,
+                    "missing_rate": 0.0
+                  }
+                ]
+              }
+            }
+          ],
+          "windows": [],
+          "base_decision": "go",
+          "final_decision": "insufficient_evidence",
+          "policy_version": "critic-1.0",
+          "limitation": "Passing diagnostics does not prove the causal assumptions. Sensitivity checks can flag concerns, not establish absence of bias."
+        },
+        "truth": {
+          "true_effect": 0.6,
+          "known": true,
+          "heterogeneous": false,
+          "note": "Known generator parameter. Heterogeneous subgroup effects are centered around this value."
+        },
+        "trace": [
+          {
+            "tool": "validate_frozen_design",
+            "status": "completed"
+          },
+          {
+            "tool": "profile_data",
+            "status": "completed"
+          },
+          {
+            "tool": "confirm_complete_case_policy",
+            "status": "completed"
+          },
+          {
+            "tool": "validate_identification",
+            "status": "completed"
+          },
+          {
+            "tool": "estimate_aipw",
+            "status": "completed"
+          },
+          {
+            "tool": "critic_review",
+            "status": "completed"
+          },
+          {
+            "tool": "apply_frozen_decision",
+            "status": "completed"
+          }
+        ]
+      }
+    }
+  ]
+}

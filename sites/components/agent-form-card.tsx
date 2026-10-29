@@ -217,10 +217,10 @@ export function AgentFormCard({
       )}
     >
       <div className="border-b border-border bg-muted/40 px-4 py-3.5 sm:px-5">
-        <div className="flex items-center gap-2 text-xs font-semibold">
+        <div className="flex items-center gap-2 text-sm font-semibold">
           <ListChecks className="h-4 w-4 text-muted-foreground" /> {visibleBlock.title}
         </div>
-        {visibleBlock.description && <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground">{visibleBlock.description}</p>}
+        {visibleBlock.description && <p className="mt-1.5 text-[14px] leading-5 text-muted-foreground">{visibleBlock.description}</p>}
       </div>
 
       <div className="space-y-5 p-4 sm:p-5">
@@ -272,7 +272,7 @@ export function AgentFormCard({
                         <RadioGroupItem id={optionId} value={option.value} className="mt-0.5" />
                         <span>
                           <span className="block text-sm font-semibold">{option.label}</span>
-                          {option.description && <span className="mt-1 block text-[11px] leading-5 text-muted-foreground">{option.description}</span>}
+                          {option.description && <span className="mt-1 block text-[14px] leading-5 text-muted-foreground">{option.description}</span>}
                         </span>
                       </label>
                     )
@@ -300,7 +300,7 @@ export function AgentFormCard({
                         />
                         <span>
                           <span className="block text-sm font-semibold">{option.label}</span>
-                          {option.description && <span className="mt-1 block text-[11px] leading-5 text-muted-foreground">{option.description}</span>}
+                          {option.description && <span className="mt-1 block text-[14px] leading-5 text-muted-foreground">{option.description}</span>}
                         </span>
                       </label>
                     )
@@ -319,7 +319,7 @@ export function AgentFormCard({
                 </Select>
               )}
 
-              {field.helper_text && <p className="text-[11px] leading-5 text-muted-foreground">{field.helper_text}</p>}
+              {field.helper_text && <p className="text-[14px] leading-5 text-muted-foreground">{field.helper_text}</p>}
             </fieldset>
           )
         })}
