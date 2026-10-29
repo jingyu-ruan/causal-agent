@@ -277,14 +277,17 @@
 }
 
 /* Research workspace using the Arc foundation. See docs/frontend-design-sop.md. */
-.app-frame { display: flex; flex-direction: column; min-height: 100dvh; }
+.app-frame { display: flex; flex-direction: column; min-height: 100dvh; --nav-offset: 55px; }
 .app-content { flex: 1; min-width: 0; }
-.app-frame.is-workbench { display: block; }
+.app-frame.is-workbench { display: block; --nav-offset: 0px; }
 
-/* Global navigation: one compact in-flow row, no fixed full-height rail.
-   Surface, radius, shadow and motion follow the Arc dropdown-menu and tabs
-   sources recorded in docs/frontend-design-sop.md. */
-.site-nav { position: relative; z-index: 40; border-bottom: 1px solid var(--border-subtle); background: var(--background); }
+/* Global navigation: one compact row that sticks to the top of the viewport and
+   tucks away while reading downward. Sticky keeps its layout space, so content
+   never jumps. Surface, radius, shadow and motion follow the Arc dropdown-menu
+   and tabs sources recorded in docs/frontend-design-sop.md. */
+.site-nav { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--border-subtle); background: var(--background); transition: transform var(--duration-fast) var(--ease-enter); }
+.site-nav.is-tucked { transform: translateY(-100%); pointer-events: none; transition: transform var(--duration-standard) var(--ease-exit); }
+@media (prefers-reduced-motion: reduce) { .site-nav, .site-nav.is-tucked { transition: none; } }
 .site-nav-inner { display: flex; align-items: center; gap: 14px; min-height: 54px; padding-block: 9px; }
 .site-brand { display: inline-flex; align-items: center; gap: 9px; flex: none; font-family: var(--font-display); font-size: 15px; font-weight: 500; letter-spacing: -.03em; }
 .site-brand > svg { flex: none; }
@@ -342,7 +345,7 @@
 .panel-heading h2, .panel-heading h3 { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
 .panel-body { padding: 22px; }
 .demo-layout { display: grid; grid-template-columns: minmax(0, 1fr) 250px; align-items: start; gap: 22px; padding-bottom: 48px; }
-.demo-aside { position: sticky; top: 24px; min-width: 0; }
+.demo-aside { position: sticky; top: calc(var(--nav-offset, 0px) + 24px); min-width: 0; }
 .demo-step { position: relative; display: flex; align-items: flex-start; gap: 11px; padding: 0 0 24px; }
 .demo-step:not(:last-child)::after { position: absolute; content: ""; left: 12px; top: 28px; bottom: 5px; width: 1px; background: var(--border); }
 .demo-step:last-child { padding-bottom: 0; }
@@ -364,7 +367,7 @@
 .workbench-starter { padding: 20px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-panel); }
 .workbench-starter h2 { font-size: 15px; font-weight: 500; }
 .workbench-starter p { margin-top: 6px; font-size: var(--type-label); line-height: 1.7; color: var(--muted-foreground); }
-#decision, #primary-result, #event-study, #drilldown, #lineage, #diagnostics, #contract, #live-report { scroll-margin-top: 24px; }
+#decision, #primary-result, #event-study, #drilldown, #lineage, #diagnostics, #contract, #live-report { scroll-margin-top: calc(var(--nav-offset, 0px) + 24px); }
 
 @media (min-width: 640px) { .site-nav-action { display: inline-flex; } }
 @media (min-width: 1024px) {
@@ -539,7 +542,7 @@
 .report-icon-button { padding:9px; }
 .report-button:hover,.report-icon-button:hover { background:var(--muted); }
 .report-layout { display:grid;grid-template-columns:166px minmax(0,1fr);gap:32px;padding:0 40px;align-items:start; }
-.report-contents { position:sticky;top:24px;padding-top:32px;font-size:14px;color:var(--muted-foreground); }
+.report-contents { position:sticky;top:calc(var(--nav-offset, 0px) + 24px);padding-top:32px;font-size:14px;color:var(--muted-foreground); }
 .report-contents > span { font-size:14px;color:var(--foreground);font-weight:500; }
 .report-contents nav { display:grid;gap:3px;margin-top:15px; }
 .report-contents a { display:flex;align-items:baseline;gap:9px;line-height:1.5;padding:7px 0; }
@@ -548,7 +551,7 @@
 .report-contents-note { margin-top:28px;padding-top:20px;border-top:1px solid var(--border);font-size:13px;line-height:1.7; }
 .report-contents-note p { margin-top:8px; }
 .report-body { min-width:0; }
-.report-section { padding:24px 0;border-bottom:1px solid var(--border);scroll-margin-top:24px; }
+.report-section { padding:24px 0;border-bottom:1px solid var(--border);scroll-margin-top:calc(var(--nav-offset, 0px) + 24px); }
 .report-section-title { display:flex;align-items:flex-start;gap:14px;margin-bottom:22px; }
 .report-section-title > span:first-child { font-size:13px;font-variant-numeric:tabular-nums;color:var(--muted-foreground);margin-top:5px; }
 .report-section-title > div { flex:1;min-width:0; }

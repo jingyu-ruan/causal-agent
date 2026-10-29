@@ -37,11 +37,22 @@ In this deployment checkout, canonical `frontend/` paths in the SOP correspond
 to the checkout root. When the full repository is present, update its canonical
 interface and synchronize styles, fonts, and report source into `sites/`.
 
-The user's newest explicit request replaces the fixed full-height left menu and
-the fixed title bar with one compact in-flow top navigation, and reduces the
+The user's earlier request replaced the fixed full-height left menu and
+the fixed title bar with one compact top navigation, and reduced the
 interface text slightly: 15px body, 14px labels and navigation, 13px compact
 captions. Report body copy stays at 14px and statistical values keep their
 sizes. This supersedes the earlier 16px body / 15px label readability update.
 The navigation lives in `frontend/components/site-nav.tsx`; see the
 [navigation and type scale section](docs/frontend-design-sop.md#navigation-and-type-scale--2026-10-29-later-request)
+of the SOP before changing the shell.
+
+The user's newest explicit request makes that top navigation answer the scroll
+direction: it sticks to the viewport top, hides with a quiet upward slide while
+scrolling down, and returns promptly on upward scrolling. This supersedes the
+in-flow-only, nothing-overlays description of the row. The row keeps its layout
+space, stays on screen at the top of the page, while a menu is open and while a
+keyboard-focused control needs it, and ignores small jitter. Sticky asides and
+scroll anchors offset themselves by `--nav-offset` so the revealed row covers no
+control. See the
+[scroll behavior section](docs/frontend-design-sop.md#scroll-behavior--2026-10-29-newest-request)
 of the SOP before changing the shell.

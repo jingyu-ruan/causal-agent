@@ -160,12 +160,13 @@ above where they disagree.
 ### Global navigation
 
 `frontend/components/site-nav.tsx` is the single global navigation. It renders
-one compact in-flow row at the top of the document, so nothing is fixed over
-page content and no column is reserved beside it.
+one compact row that sticks to the top of the viewport and keeps its layout
+space in flow, so no column is reserved beside it and content never jumps. The
+row answers the scroll direction; see the scroll behavior section below.
 
 | Element | Rule |
 | --- | --- |
-| Row | In flow, `page-shell` width and padding, 54px minimum height, `--border-subtle` hairline below |
+| Row | Sticky at the viewport top while holding its in-flow space, `page-shell` width and padding, 54px minimum height, `--border-subtle` hairline below |
 | Brand | Causal mark plus wordmark at 15px Geist, 500 weight, tracking −0.03em; no subtitle |
 | Destinations | 14px Inter links at 34px height, radius 14px, `--muted-foreground` resting |
 | Active and hover | `--muted` fill with `--foreground` text; active adds 500 weight and `aria-current="page"` |
@@ -185,8 +186,36 @@ opens a new tab. Links stay real anchors through `components/page-link.tsx`.
 The `/studies/new` conversation shell keeps its own header and history sidebar;
 the global navigation is not rendered there.
 
-Because nothing overlays the page any more, sticky asides and scroll anchors use
-a 24px offset instead of the former 85–90px fixed-bar allowance.
+### Scroll behavior — 2026-10-29 (newest request)
+
+The user asked for the top menu to hide while scrolling down and to come back
+when scrolling up. This supersedes the in-flow-only, nothing-overlays wording
+above: the row is sticky, and `useScrollReveal` in `site-nav.tsx` decides when it
+is on screen.
+
+| Rule | Value |
+| --- | --- |
+| Always shown | Clamped scroll offset within the top 64px band, and whenever the page cannot scroll |
+| Tuck away | 12px of sustained downward travel, `translateY(-100%)` over `--duration-standard` / `--ease-exit` |
+| Return | 6px of upward travel, over `--duration-fast` / `--ease-enter` |
+| Jitter | Accumulate travel within one direction; reset the baseline at a reversal so small movements do not flicker or delay upward reveal |
+| Held on screen | An open disclosure panel, or a `:focus-visible` control inside the row |
+| Tucked state | `pointer-events: none`, so hidden controls cannot be clicked; focus still reaches them and reveals the row |
+| Route change | Shows the row again, matching the per-route menu remount |
+| Reduced motion | No transition; the row changes state without sliding |
+| Print | The row stays hidden, unchanged |
+
+The listener is `passive`, measures inside one `requestAnimationFrame` per burst,
+clamps the offset to the real scroll range so overscroll cannot invert the
+direction, and cancels its frame and listener on cleanup. The listener is not
+installed on the `/studies/new` shell, which renders no global navigation.
+
+`.app-frame` publishes `--nav-offset: 55px` (row plus hairline) and the workbench
+shell sets it to `0px`. Sticky asides (`.demo-aside`, `.report-contents`) and
+scroll anchors (`.report-section` and the study anchor list) use
+`calc(var(--nav-offset, 0px) + 24px)`, so the revealed row never covers their
+first control. The `0px` fallback keeps exported standalone reports, which have
+no `.app-frame` ancestor, at the former 24px offset.
 
 ### Type scale
 
