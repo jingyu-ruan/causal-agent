@@ -189,26 +189,31 @@ the global navigation is not rendered there.
 ### Scroll behavior — 2026-10-29 (newest request)
 
 The user asked for the top menu to hide while scrolling down and to come back
-when scrolling up. This supersedes the in-flow-only, nothing-overlays wording
-above: the row is sticky, and `useScrollReveal` in `site-nav.tsx` decides when it
-is on screen.
+when scrolling up, and then repeated that the downward hide must feel as
+immediate and as obvious as the upward reveal. This supersedes the in-flow-only,
+nothing-overlays wording above, and also the earlier 16px top band and 4px
+downward threshold: the row is sticky, and `useScrollReveal` in `site-nav.tsx`
+decides when it is on screen.
 
 | Rule | Value |
 | --- | --- |
-| Always shown | Clamped scroll offset within the top 16px band, and whenever the page cannot scroll |
-| Tuck away | 4px of downward travel, `translateY(-100%)` over `--duration-fast` / `--ease-exit` |
+| Always shown | Clamped scroll offset exactly at `0`, and whenever the page has no scroll range |
+| Tuck away | The first positive downward delta, with no waiting band and no accumulation, `translateY(-100%)` over `--duration-fast` / `--ease-enter` |
 | Return | 6px of upward travel, over `--duration-fast` / `--ease-enter` |
-| Jitter | Accumulate travel within one direction; reset the baseline at a reversal so small movements do not flicker or delay upward reveal |
+| Motion curve | The same 160ms front-loaded `--ease-enter` in both directions; `--ease-exit` starts slowly and made hiding read as slower than the reveal |
+| Jitter | Downward movement acts at once; upward travel accumulates within one direction and resets its baseline at a reversal, so jitter cannot flicker the row back or delay the reveal |
 | Held on screen | An open disclosure panel, or a `:focus-visible` control inside the row |
 | Tucked state | `pointer-events: none`, so hidden controls cannot be clicked; focus still reaches them and reveals the row |
 | Route change | Shows the row again, matching the per-route menu remount |
 | Reduced motion | No transition; the row changes state without sliding |
 | Print | The row stays hidden, unchanged |
 
-The listener is `passive`, measures inside one `requestAnimationFrame` per burst,
-clamps the offset to the real scroll range so overscroll cannot invert the
-direction, and cancels its frame and listener on cleanup. The listener is not
-installed on the `/studies/new` shell, which renders no global navigation.
+The downward delta is read against the previous offset before that offset is
+replaced, so one measured pixel of downward scrolling is enough. The listener is
+`passive`, measures inside one `requestAnimationFrame` per burst, clamps the
+offset to the real scroll range so overscroll cannot invert the direction, and
+cancels its frame and listener on cleanup. The listener is not installed on the
+`/studies/new` shell, which renders no global navigation.
 
 `.app-frame` publishes `--nav-offset: 55px` (row plus hairline) and the workbench
 shell sets it to `0px`. Sticky asides (`.demo-aside`, `.report-contents`) and

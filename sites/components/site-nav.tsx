@@ -165,10 +165,7 @@ function NavMenu({ id, items, pathname, action = false, onOpenChange, children }
   </>
 }
 
-/** Band at the top of the document where the navigation always stays. */
-const TOP_BAND = 16
-/** Travel that tucks the row away, and the travel that returns it. */
-const TUCK_TRAVEL = 4
+/** Upward travel that returns the row. Downward movement tucks it at once. */
 const REVEAL_TRAVEL = 6
 
 /** Scroll offset clamped to the real range, so overscroll cannot invert travel. */
@@ -187,10 +184,12 @@ function keyboardFocus(target: EventTarget | null) {
 }
 
 /**
- * Tuck the navigation away on sustained downward scrolling and return it on the
- * first upward move. Movement below the thresholds keeps the previous baseline,
- * so jitter cannot flicker the row. `held` keeps it on screen for an open
- * disclosure or a keyboard-focused control, and the route resets the state.
+ * Tuck the navigation away as soon as the page moves downward and return it on
+ * upward scrolling. The row is always on screen exactly at the top of the
+ * document, so the first downward pixel hides it and no waiting band delays
+ * that. Upward movement still accumulates past a small threshold, so jitter
+ * cannot flicker the row back. `held` keeps it on screen for an open disclosure
+ * or a keyboard-focused control, and the route resets the state.
  */
 function useScrollReveal(held: boolean, route: string, active: boolean) {
   const [tucked, setTucked] = useState(false)
@@ -210,18 +209,20 @@ function useScrollReveal(held: boolean, route: string, active: boolean) {
       frame = 0
       const offset = scrollOffset()
       const nextDirection = Math.sign(offset - previous)
-      // Count travel from the turn, including a reversal before the previous
-      // direction reached its threshold. Upward reveal must stay responsive.
+      // Count upward travel from the turn, including a reversal before the
+      // previous direction reached its threshold, so the reveal stays prompt.
       if (nextDirection && nextDirection !== direction) {
         baseline = previous
         direction = nextDirection
       }
+      // Read the downward move against the previous offset before replacing it.
+      const descending = offset > previous
       previous = offset
       const travel = offset - baseline
-      if (offset <= TOP_BAND) {
+      if (offset <= 0) {
         baseline = offset
         setTucked(false)
-      } else if (travel >= TUCK_TRAVEL) {
+      } else if (descending) {
         baseline = offset
         if (!holding.current) setTucked(true)
       } else if (travel < -REVEAL_TRAVEL) {
