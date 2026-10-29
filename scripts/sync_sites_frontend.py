@@ -1,6 +1,6 @@
 """Copy the canonical Next.js interface into the Sites Vinext deployment source."""
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "frontend"
