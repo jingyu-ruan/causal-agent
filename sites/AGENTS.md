@@ -47,12 +47,17 @@ The navigation lives in `components/site-nav.tsx` in this checkout; see the
 of the SOP before changing the shell.
 
 The user's newest explicit request makes that top navigation answer the scroll
-direction: it sticks to the viewport top, hides with a quiet upward slide while
-scrolling down, and returns promptly on upward scrolling. This supersedes the
-in-flow-only, nothing-overlays description of the row. The row keeps its layout
-space, stays on screen at the top of the page, while a menu is open and while a
-keyboard-focused control needs it, and ignores small jitter. Sticky asides and
-scroll anchors offset themselves by `--nav-offset` so the revealed row covers no
-control. See the
+direction and the scroll speed: it sticks to the viewport top, hides with a
+quiet upward slide while scrolling down quickly, and returns promptly on quick
+upward scrolling. Slow scrolling in either direction keeps whatever state the
+row is already in, and slow travel never accumulates into a hide or a reveal.
+The first 80px of the document always shows the row, whatever the speed. The
+defaults are `TOP_PIN_DISTANCE` 80px and `SCROLL_SPEED_THRESHOLD` 0.2 CSS px/ms
+(200px/s) for both directions. This supersedes the in-flow-only,
+nothing-overlays description of the row and the earlier unconditional
+first-pixel hide. The row keeps its layout space, stays on screen near the top
+of the page, while a menu is open and while a keyboard-focused control needs it,
+and ignores small jitter. Sticky asides and scroll anchors offset themselves by
+`--nav-offset` so the revealed row covers no control. See the
 [scroll behavior section](docs/frontend-design-sop.md#scroll-behavior--2026-10-29-newest-request)
 of the SOP before changing the shell.

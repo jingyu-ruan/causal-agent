@@ -162,7 +162,8 @@ above where they disagree.
 `frontend/components/site-nav.tsx` is the single global navigation. It renders
 one compact row that sticks to the top of the viewport and keeps its layout
 space in flow, so no column is reserved beside it and content never jumps. The
-row answers the scroll direction; see the scroll behavior section below.
+row answers the scroll direction and speed; see the scroll behavior section
+below.
 
 | Element | Rule |
 | --- | --- |
@@ -189,31 +190,48 @@ the global navigation is not rendered there.
 ### Scroll behavior — 2026-10-29 (newest request)
 
 The user asked for the top menu to hide while scrolling down and to come back
-when scrolling up, and then repeated that the downward hide must feel as
-immediate and as obvious as the upward reveal. This supersedes the in-flow-only,
-nothing-overlays wording above, and also the earlier 16px top band and 4px
-downward threshold: the row is sticky, and `useScrollReveal` in `site-nav.tsx`
-decides when it is on screen.
+when scrolling up, then for the downward hide to feel as immediate as the
+upward reveal, and then for both directions to be gated on scroll speed: slow
+scrolling should not summon or dismiss the row, and a band at the top of the
+document should keep it fixed in place. This supersedes the in-flow-only,
+nothing-overlays wording above, the earlier 16px top band and 4px downward
+threshold, and the unconditional first-pixel hide: the row is sticky, and
+`useScrollReveal` in `site-nav.tsx` decides when it is on screen.
 
 | Rule | Value |
 | --- | --- |
-| Always shown | Clamped scroll offset exactly at `0`, and whenever the page has no scroll range |
-| Tuck away | The first positive downward delta, with no waiting band and no accumulation, `translateY(-100%)` over `--duration-fast` / `--ease-enter` |
-| Return | 6px of upward travel, over `--duration-fast` / `--ease-enter` |
+| Always shown | Clamped scroll offset within `TOP_PIN_DISTANCE` = 80px of the document top, including a return into that band, and whenever the page has no scroll range |
+| Speed gate | `SCROLL_SPEED_THRESHOLD` = 0.2 CSS px/ms (200px/s), the same in both directions |
+| Slow scrolling | Keeps the current shown or tucked state; travel below the threshold never accumulates into a hide or a reveal, however far the page moves |
+| Tuck away | The first downward movement at or above the speed gate, outside the top band, `translateY(-100%)` over `--duration-fast` / `--ease-enter` |
+| Return | 6px of upward travel at or above the speed gate, over `--duration-fast` / `--ease-enter` |
 | Motion curve | The same 160ms front-loaded `--ease-enter` in both directions; `--ease-exit` starts slowly and made hiding read as slower than the reveal |
-| Jitter | Downward movement acts at once; upward travel accumulates within one direction and resets its baseline at a reversal, so jitter cannot flicker the row back or delay the reveal |
+| Jitter | The 6px upward travel guard stays, so a fast but tiny upward twitch cannot flicker the row back |
 | Held on screen | An open disclosure panel, or a `:focus-visible` control inside the row |
 | Tucked state | `pointer-events: none`, so hidden controls cannot be clicked; focus still reaches them and reveals the row |
 | Route change | Shows the row again, matching the per-route menu remount |
 | Reduced motion | No transition; the row changes state without sliding |
 | Print | The row stays hidden, unchanged |
 
+Speed comes from a short recent-gesture estimator on `performance.now()`:
+movement accumulates distance and elapsed time, and the pair is scaled back
+into a `GESTURE_WINDOW` = 160ms window, so the reading is an average of recent
+movement rather than a total. A direction change or a `GESTURE_IDLE` = 120ms
+gap without movement starts a fresh gesture, so a fast downward flick cannot
+lend its speed to a slow upward reversal or to a later gesture, and a long pause
+cannot dilute the gesture that follows it. The opening movement of a gesture is
+credited a conservative 80ms interval after idling, while a reversal uses its
+actual elapsed time. This keeps a single large wheel step responsive without
+mistaking a small idle nudge or a slow reversal for a fast gesture. A frame that reports no
+movement is ignored rather than ageing the gesture.
+
 The downward delta is read against the previous offset before that offset is
-replaced, so one measured pixel of downward scrolling is enough. The listener is
-`passive`, measures inside one `requestAnimationFrame` per burst, clamps the
-offset to the real scroll range so overscroll cannot invert the direction, and
-cancels its frame and listener on cleanup. The listener is not installed on the
-`/studies/new` shell, which renders no global navigation.
+replaced, so one measured pixel of downward movement is enough once the gesture
+is fast. The listener is `passive`, measures inside one `requestAnimationFrame`
+per burst, clamps the offset to the real scroll range so overscroll cannot
+invert the direction, and cancels its frame and listener on cleanup. The
+listener is not installed on the `/studies/new` shell, which renders no global
+navigation.
 
 `.app-frame` publishes `--nav-offset: 55px` (row plus hairline) and the workbench
 shell sets it to `0px`. Sticky asides (`.demo-aside`, `.report-contents`) and

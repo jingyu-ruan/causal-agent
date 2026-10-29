@@ -282,11 +282,12 @@
 .app-frame.is-workbench { display: block; --nav-offset: 0px; }
 
 /* Global navigation: one compact row that sticks to the top of the viewport and
-   tucks away as soon as reading moves downward. Sticky keeps its layout space,
-   so content never jumps. Both directions use the same front-loaded Arc
-   ease-enter curve, so hiding reads as immediately as the reveal. Surface,
-   radius, shadow and motion follow the Arc dropdown-menu and tabs sources
-   recorded in docs/frontend-design-sop.md. */
+   tucks away when reading moves downward at a deliberate speed. Slow scrolling
+   leaves the row as it is, and the first 80px of the document always shows it.
+   Sticky keeps its layout space, so content never jumps. Both directions use
+   the same front-loaded Arc ease-enter curve, so hiding reads as immediately as
+   the reveal. Surface, radius, shadow and motion follow the Arc dropdown-menu
+   and tabs sources recorded in docs/frontend-design-sop.md. */
 .site-nav { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--border-subtle); background: var(--background); transition: transform var(--duration-fast) var(--ease-enter); }
 .site-nav.is-tucked { transform: translateY(-100%); pointer-events: none; transition: transform var(--duration-fast) var(--ease-enter); }
 @media (prefers-reduced-motion: reduce) { .site-nav, .site-nav.is-tucked { transition: none; } }

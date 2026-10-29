@@ -165,8 +165,23 @@ function NavMenu({ id, items, pathname, action = false, onOpenChange, children }
   </>
 }
 
-/** Upward travel that returns the row. Downward movement tucks it at once. */
+/** Upward travel that returns the row, so jitter cannot flicker it back. */
 const REVEAL_TRAVEL = 6
+
+/** Top band of the document that always shows the row, at any scroll speed. */
+const TOP_PIN_DISTANCE = 80
+
+/** Speed that reads as a deliberate gesture, in CSS px per ms (200px/s). */
+const SCROLL_SPEED_THRESHOLD = 0.2
+
+/** Gap between movements that ends a gesture, in ms. */
+const GESTURE_IDLE = 120
+
+/** Span the speed estimate averages over, in ms. */
+const GESTURE_WINDOW = 160
+
+/** Conservative opening interval when the previous movement was idle, in ms. */
+const GESTURE_FIRST_STEP = 80
 
 /** Scroll offset clamped to the real range, so overscroll cannot invert travel. */
 function scrollOffset() {
@@ -184,12 +199,14 @@ function keyboardFocus(target: EventTarget | null) {
 }
 
 /**
- * Tuck the navigation away as soon as the page moves downward and return it on
- * upward scrolling. The row is always on screen exactly at the top of the
- * document, so the first downward pixel hides it and no waiting band delays
- * that. Upward movement still accumulates past a small threshold, so jitter
- * cannot flicker the row back. `held` keeps it on screen for an open disclosure
- * or a keyboard-focused control, and the route resets the state.
+ * Let the navigation answer deliberate scrolling. A gesture faster than
+ * `SCROLL_SPEED_THRESHOLD` downward tucks the row away, and a gesture that fast
+ * upward returns it; slower movement in either direction leaves the row as it
+ * is, so reading at a crawl neither hides nor reveals it however far the page
+ * travels. The first `TOP_PIN_DISTANCE` of the document always shows the row,
+ * including a return into that band and a page with no scroll range. `held`
+ * keeps it on screen for an open disclosure or a keyboard-focused control, and
+ * the route resets the state.
  */
 function useScrollReveal(held: boolean, route: string, active: boolean) {
   const [tucked, setTucked] = useState(false)
@@ -203,29 +220,55 @@ function useScrollReveal(held: boolean, route: string, active: boolean) {
     let baseline = scrollOffset()
     let previous = baseline
     let direction = 0
+    let distance = 0
+    let elapsed = 0
+    let moved = performance.now()
     let frame = 0
 
     const measure = () => {
       frame = 0
       const offset = scrollOffset()
-      const nextDirection = Math.sign(offset - previous)
-      // Count upward travel from the turn, including a reversal before the
-      // previous direction reached its threshold, so the reveal stays prompt.
-      if (nextDirection && nextDirection !== direction) {
-        baseline = previous
-        direction = nextDirection
-      }
-      // Read the downward move against the previous offset before replacing it.
-      const descending = offset > previous
+      const from = previous
+      const delta = offset - from
+      // Coalesced frames can report no movement; they must not age a gesture.
+      if (!delta) return
       previous = offset
+      const now = performance.now()
+      const gap = now - moved
+      moved = now
+      const nextDirection = Math.sign(delta)
+
+      // Measure one gesture at a time. A turn or a pause starts a fresh
+      // estimate, so a fast flick can neither lend its speed to a slow
+      // reversal nor leave a stale reading for the next gesture, and a long
+      // pause cannot dilute the gesture that follows it. A turn uses its real
+      // elapsed time; only an idle start needs a conservative opening estimate.
+      const afterIdle = !direction || gap > GESTURE_IDLE
+      if (nextDirection !== direction || afterIdle) {
+        baseline = from
+        direction = nextDirection
+        distance = Math.abs(delta)
+        elapsed = afterIdle ? GESTURE_FIRST_STEP : Math.max(1, gap)
+      } else {
+        distance += Math.abs(delta)
+        elapsed += gap
+        // Average over the recent window only, so slow travel never adds up
+        // into a fast reading however long it continues.
+        if (elapsed > GESTURE_WINDOW) {
+          distance *= GESTURE_WINDOW / elapsed
+          elapsed = GESTURE_WINDOW
+        }
+      }
+
+      const deliberate = distance / elapsed > SCROLL_SPEED_THRESHOLD
       const travel = offset - baseline
-      if (offset <= 0) {
+      if (offset <= TOP_PIN_DISTANCE) {
         baseline = offset
         setTucked(false)
-      } else if (descending) {
+      } else if (delta > 0) {
         baseline = offset
-        if (!holding.current) setTucked(true)
-      } else if (travel < -REVEAL_TRAVEL) {
+        if (deliberate && !holding.current) setTucked(true)
+      } else if (deliberate && travel < -REVEAL_TRAVEL) {
         baseline = offset
         setTucked(false)
       }
