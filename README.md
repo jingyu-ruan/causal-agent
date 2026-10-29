@@ -263,6 +263,12 @@ NEXT_PUBLIC_API_URL=http://localhost:8000 docker compose up --build
 `NEXT_PUBLIC_API_URL` is embedded into the browser bundle during the frontend
 build. Set it to the publicly reachable backend URL for deployment.
 
+The frontend installs with npm and `frontend/package-lock.json` is its only
+lockfile, matching continuous integration. Set Vercel's Root Directory to
+`frontend`. `frontend/vercel.json` pins the
+Vercel install and build commands to `npm ci` and `npm run build`. The Sites
+deployment in `sites/` keeps its own separate pnpm lockfile.
+
 Render's free instance may take about two minutes to wake after inactivity. The
 web client treats that period as **warming**, polls `/ready`, and only reports a
 failure after the bounded readiness window expires.
