@@ -25,9 +25,11 @@ operations.
 
 The canonical implementation lives in `frontend/`. Shared tokens and workspace
 styles are in `frontend/app/globals.css`; shared controls are in
-`frontend/components/ui/`. Both the workspace navigation and the separate study
-conversation layout need to follow the same reference. Synchronize completed
-interface changes into `sites/` with `python scripts/sync_sites_frontend.py`.
+`frontend/components/ui/`. The global shell is one compact in-flow top
+navigation in `frontend/components/site-nav.tsx`; there is no fixed side rail or
+title bar. Both that navigation and the separate study conversation layout need
+to follow the same reference. Synchronize completed interface changes into
+`sites/` with `python scripts/sync_sites_frontend.py`.
 
 ## Presentation sequence
 
@@ -59,8 +61,8 @@ provided templates can proceed with the statistical service alone.
 ## Navigation verification
 
 Page links use standard document navigation. This avoids a production-only
-Vinext RSC navigation failure that prevented sidebar links and programmatic
-report links from opening. Adding a newly created conversation ID uses
+Vinext RSC navigation failure that prevented shared navigation links and
+programmatic report links from opening. Adding a newly created conversation ID uses
 `history.replaceState` to preserve the active document and attached files.
 Opening another conversation navigates to its persisted snapshot.
 

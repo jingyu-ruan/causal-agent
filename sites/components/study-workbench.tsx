@@ -1270,7 +1270,7 @@ export function StudyWorkbench() {
           </div>
         </section>
         <aside className="workbench-inspector hidden xl:block" aria-label="Study evidence inspector">
-          <p className="section-kicker">Study record</p><h2 className="mt-2 text-[16px] font-semibold">Evidence at a glance</h2>
+          <p className="section-kicker">Study record</p><h2 className="mt-2 text-[15px] font-semibold">Evidence at a glance</h2>
           <p className="mt-3 text-[14px] leading-6 text-muted-foreground">The conversation builds a structured study. Its confirmed assumptions appear here.</p>
           <dl className="mt-6 space-y-5">
             {[ ["Research question", capturedFields.includes("business_question") ? input.business_question : "Define the question in the conversation."], ["Method", capturedFields.includes("design_type") ? input.design_type === "did" ? "Difference-in-differences" : "Randomized A/B" : "Awaiting study design"], ["Primary metric", capturedFields.includes("primary_metric") ? input.primary_metric : "Awaiting metric definition"], ["Design status", artifact ? "Frozen and versioned" : "Draft / Open for review"], ["Dataset", file?.name ?? "Load demo data or upload after freezing."] ].map(([label, value]) => <div key={label}><dt className="text-[14px] text-muted-foreground">{label}</dt><dd className="mt-1.5 break-words text-[14px] leading-6">{value}</dd></div>)}

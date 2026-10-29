@@ -37,5 +37,11 @@ In this deployment checkout, canonical `frontend/` paths in the SOP correspond
 to the checkout root. When the full repository is present, update its canonical
 interface and synchronize styles, fonts, and report source into `sites/`.
 
-The latest explicit readability update uses at least 14px text, 16px body, and
-15px navigation/labels. It supersedes the previous 12–13px report body sizes.
+The user's newest explicit request replaces the fixed full-height left menu and
+the fixed title bar with one compact in-flow top navigation, and reduces the
+interface text slightly: 15px body, 14px labels and navigation, 13px compact
+captions. Report body copy stays at 14px and statistical values keep their
+sizes. This supersedes the earlier 16px body / 15px label readability update.
+The navigation lives in `frontend/components/site-nav.tsx`; see the
+[navigation and type scale section](docs/frontend-design-sop.md#navigation-and-type-scale--2026-10-29-later-request)
+of the SOP before changing the shell.

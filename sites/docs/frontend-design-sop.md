@@ -148,3 +148,57 @@ The user explicitly requested larger text throughout the Site. Use a minimum
 body guidance above. Preserve the local Inter/Geist families and the formal
 report hierarchy. Preload the local Latin fonts and keep the shared navigation
 mounted during internal transitions.
+
+## Navigation and type scale — 2026-10-29 (later request)
+
+The user asked for the fixed full-height left menu and the fixed title bar to be
+removed, because together they wasted space, duplicated the current page name
+and the appearance toggle, and overlapped content. The same request asked for
+slightly smaller interface text. This section supersedes the readability update
+above where they disagree.
+
+### Global navigation
+
+`frontend/components/site-nav.tsx` is the single global navigation. It renders
+one compact in-flow row at the top of the document, so nothing is fixed over
+page content and no column is reserved beside it.
+
+| Element | Rule |
+| --- | --- |
+| Row | In flow, `page-shell` width and padding, 54px minimum height, `--border-subtle` hairline below |
+| Brand | Causal mark plus wordmark at 15px Geist, 500 weight, tracking −0.03em; no subtitle |
+| Destinations | 14px Inter links at 34px height, radius 14px, `--muted-foreground` resting |
+| Active and hover | `--muted` fill with `--foreground` text; active adds 500 weight and `aria-current="page"` |
+| Tools menu | Disclosure button with a chevron that rotates 180° over `--duration-spring` / `--ease-spring` |
+| Menu surface | 5px padding, `--radius-panel`, `--popover`, `--shadow-floating`, 36px items at `calc(--radius-panel - 6px)`, adapted from the free Arc dropdown-menu source |
+| Menu entrance | `arc-fade-in` at `--duration-fast` plus `arc-menu-in` (5px rise, .97 scale) on the spring; items stagger 35ms, capped at five |
+| Appearance | `ThemeToggle` sits in the navigation; the duplicate title-bar copy is gone |
+| Below 1024px | Destinations collapse into one labelled menu button; the menu renders nothing while closed |
+| Below 640px | The New study button moves into that menu, after a separator |
+
+Keyboard behavior: Enter, Space or ArrowDown opens and focuses the first item;
+ArrowDown, ArrowUp, Home and End move within the panel; Escape closes and
+returns focus to the trigger; moving focus or pointer out of the navigation
+closes it. Navigation itself closes the menu, except for a modifier click that
+opens a new tab. Links stay real anchors through `components/page-link.tsx`.
+
+The `/studies/new` conversation shell keeps its own header and history sidebar;
+the global navigation is not rendered there.
+
+Because nothing overlays the page any more, sticky asides and scroll anchors use
+a 24px offset instead of the former 85–90px fixed-bar allowance.
+
+### Type scale
+
+| Role | Size |
+| --- | --- |
+| `--type-body` | 15px |
+| `--type-label`, navigation, controls | 14px |
+| `--type-caption`, compact captions and axis labels | 13px |
+| Report body copy, tables and rationale | 14px |
+| Report captions, column headers, metric labels, hashes, footer | 13px |
+| Report cover title, section titles, principal values | unchanged |
+
+Statistical values, intervals and uncertainty text keep their previous sizes.
+Do not shrink the document with `zoom` or a transform, and do not change the
+numeric values in `styles/arc-foundation.css`.
