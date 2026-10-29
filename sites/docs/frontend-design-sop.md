@@ -204,8 +204,8 @@ threshold, and the unconditional first-pixel hide: the row is sticky, and
 | Speed gate | `SCROLL_SPEED_THRESHOLD` = 0.2 CSS px/ms (200px/s), the same in both directions |
 | Slow scrolling | Keeps the current shown or tucked state; travel below the threshold never accumulates into a hide or a reveal, however far the page moves |
 | Tuck away | The first downward movement at or above the speed gate, outside the top band, `translateY(-100%)` over `--duration-fast` / `--ease-enter` |
-| Return | 6px of upward travel at or above the speed gate, over `--duration-fast` / `--ease-enter` |
-| Motion curve | The same 160ms front-loaded `--ease-enter` in both directions; `--ease-exit` starts slowly and made hiding read as slower than the reveal |
+| Return | 6px of upward travel at or above the speed gate, over `--duration-standard` / `--ease-enter` |
+| Motion curve | The same front-loaded `--ease-enter` in both directions, with the reveal settling over 240ms and the hide over 160ms; `--ease-exit` starts slowly and made hiding read as slower than the reveal |
 | Jitter | The 6px upward travel guard stays, so a fast but tiny upward twitch cannot flicker the row back |
 | Held on screen | An open disclosure panel, or a `:focus-visible` control inside the row |
 | Tucked state | `pointer-events: none`, so hidden controls cannot be clicked; focus still reaches them and reveals the row |
