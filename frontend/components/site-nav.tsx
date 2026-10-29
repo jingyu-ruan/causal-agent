@@ -166,9 +166,9 @@ function NavMenu({ id, items, pathname, action = false, onOpenChange, children }
 }
 
 /** Band at the top of the document where the navigation always stays. */
-const TOP_BAND = 64
-/** Travel needed to tuck the row away, and the shorter travel that returns it. */
-const TUCK_TRAVEL = 12
+const TOP_BAND = 16
+/** Travel that tucks the row away, and the travel that returns it. */
+const TUCK_TRAVEL = 4
 const REVEAL_TRAVEL = 6
 
 /** Scroll offset clamped to the real range, so overscroll cannot invert travel. */
@@ -221,7 +221,7 @@ function useScrollReveal(held: boolean, route: string, active: boolean) {
       if (offset <= TOP_BAND) {
         baseline = offset
         setTucked(false)
-      } else if (travel > TUCK_TRAVEL) {
+      } else if (travel >= TUCK_TRAVEL) {
         baseline = offset
         if (!holding.current) setTucked(true)
       } else if (travel < -REVEAL_TRAVEL) {

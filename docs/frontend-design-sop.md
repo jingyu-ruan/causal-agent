@@ -195,8 +195,8 @@ is on screen.
 
 | Rule | Value |
 | --- | --- |
-| Always shown | Clamped scroll offset within the top 64px band, and whenever the page cannot scroll |
-| Tuck away | 12px of sustained downward travel, `translateY(-100%)` over `--duration-standard` / `--ease-exit` |
+| Always shown | Clamped scroll offset within the top 16px band, and whenever the page cannot scroll |
+| Tuck away | 4px of downward travel, `translateY(-100%)` over `--duration-fast` / `--ease-exit` |
 | Return | 6px of upward travel, over `--duration-fast` / `--ease-enter` |
 | Jitter | Accumulate travel within one direction; reset the baseline at a reversal so small movements do not flicker or delay upward reveal |
 | Held on screen | An open disclosure panel, or a `:focus-visible` control inside the row |
