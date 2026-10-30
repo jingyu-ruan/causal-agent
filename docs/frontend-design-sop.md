@@ -254,3 +254,36 @@ no `.app-frame` ancestor, at the former 24px offset.
 Statistical values, intervals and uncertainty text keep their previous sizes.
 Do not shrink the document with `zoom` or a transform, and do not change the
 numeric values in `styles/arc-foundation.css`.
+
+## Interface language — 2026-10-29
+
+The user asked for an English-only product interface after finding Chinese copy
+in the conversation field of `/research/case/rct-go`. Every authored string and
+every assistant-generated interface response is English, whatever language the
+user writes in. There is no translation framework and no language toggle.
+
+| Boundary | Rule |
+| --- | --- |
+| `lib/agent-api.ts` | `INTERFACE_LOCALE = "en"` is the only locale source; `navigator.language` is never read |
+| `POST /api/agent/intake` | `AgentTurnRequest` normalizes any requested locale to `en`, so an older client cannot select another language |
+| Intake system prompts | `backend/agent.py` and `lib/openrouter-contract.ts` both require English messages, titles, labels, placeholders, helper text, option labels and suggestion bases |
+| Deterministic recovery | The malformed-reply fallback form, its suggestion bases and the guardrail form are application-owned English copy |
+| `lib/evidence-answer.ts` | `referenceAnswer` routes on English and Chinese keywords and always answers in English |
+| Ask-the-evidence panel | The placeholder is English and the note states that questions are understood in English and Chinese while answers are English |
+
+Input recognition and user data are explicitly out of scope of the rule. Intake
+confirmations, guardrail "none" answers, evidence questions and
+`lib/column-mapping.ts` metric and column terms still match Chinese. A research
+question, hypothesis, metric name, imported column name or stored conversation
+is study data: render and persist it verbatim. Never blank, strip or
+regex-rewrite it. The obsolete `双差分` term normalizer and the Chinese
+guardrail-label rewrite of restored form responses were removed for that reason:
+they edited stored text to repair copy the interface no longer produces.
+
+Regressions that hold the rule: `tests/research.test.mjs` asserts that nine
+Chinese questions keep their tool routing, support flag and citations while
+answering in English; `tests/openrouter-contract.test.mjs` asserts the recovery
+form and system prompt contain no CJK under a `zh-CN` locale;
+`tests/test_agent_api.py` asserts locale normalization, an English fallback and
+guardrail form under `zh-CN`, and that a Chinese metric name still survives in
+the draft.

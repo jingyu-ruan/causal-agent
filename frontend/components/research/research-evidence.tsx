@@ -883,9 +883,9 @@ function EvidenceChat({
       <h2 className="text-xl font-semibold">Ask this evidence record</h2>
       <p className="research-note mt-3">
         A bounded evidence assistant retrieves facts from this selected run.
-        English and Chinese questions are supported. Answers include exact field
-        citations; unsupported claims are declined. Mode: deterministic
-        retrieval.
+        Questions are understood in English and Chinese; answers are always in
+        English. Answers include exact field citations; unsupported claims are
+        declined. Mode: deterministic retrieval.
       </p>
       <div className="mt-5 flex flex-wrap gap-2">
         {[
@@ -959,7 +959,7 @@ function EvidenceChat({
       >
         <Input
           className="study-input flex-1"
-          placeholder="为什么是 HOLD？ / What limits this conclusion?"
+          placeholder="Why is this the decision? What limits this conclusion?"
           aria-label="Ask about the selected evidence run"
           value={question}
           maxLength={1000}

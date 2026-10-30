@@ -2,6 +2,13 @@ import { API_BASE_URL } from "@/lib/config"
 import type { AgentModel } from "@/lib/agent-settings"
 import type { StudyDesignInput } from "@/lib/studies-api"
 
+/**
+ * The product interface is English-only. Intake requests declare this locale
+ * instead of the browser language, so generated questions, forms and reference
+ * answers stay English even when the user writes in another language.
+ */
+export const INTERFACE_LOCALE = "en"
+
 export type AgentDraftField =
   | "name"
   | "mode"

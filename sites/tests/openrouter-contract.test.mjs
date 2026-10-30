@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { validateOpenRouterTurn } from "../lib/openrouter-contract.ts"
+import { OPENROUTER_SYSTEM_PROMPT, validateOpenRouterTurn } from "../lib/openrouter-contract.ts"
 const state = { draft: {}, captured_fields: [], locale: "en" }
 const turn = { message: "What decision should the study support?", draft_patch: { mode: "prospective" }, blocks: [], next_action: "review" }
 test("free model cannot advance an incomplete study to review", () => {
@@ -30,4 +30,16 @@ test("empty guardrails are confirmed and completeness is computed locally", () =
  assert.equal(result.ready_to_freeze, true)
  assert.deepEqual(result.blocks, [])
  assert.equal(result.next_action, "review")
+})
+test("the recovery form and system prompt stay English under a Chinese locale", () => {
+ const cjk = /[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]/u
+ const result = validateOpenRouterTurn({ ...turn, message: "继续", draft_patch: {}, blocks: [], next_action: "collect" }, { draft: {}, captured_fields: [], locale: "zh-CN" })
+ const block = result.blocks[0]
+ const copy = [block.title, block.description, block.submit_label, ...block.fields.flatMap(field => [field.label, field.placeholder, field.helper_text])].filter(Boolean).join(" ")
+ assert.equal(block.title, "Study details")
+ assert.equal(block.submit_label, "Continue")
+ assert.equal(block.fields[0].label, "Is this study prospective or retrospective?")
+ assert.ok(!cjk.test(copy), copy)
+ assert.ok(OPENROUTER_SYSTEM_PROMPT.includes("Always reply in English"))
+ assert.ok(!cjk.test(OPENROUTER_SYSTEM_PROMPT))
 })

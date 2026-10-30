@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Generator
 
 import pytest
@@ -8,6 +9,13 @@ from fastapi.testclient import TestClient
 
 from backend import agent as agent_module
 from backend.agent import router
+
+CJK = re.compile(r"[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]")
+
+
+def _cjk(text: str) -> bool:
+    """The interface is English-only, so generated copy must contain no CJK."""
+    return bool(CJK.search(text))
 
 
 @pytest.fixture
@@ -242,7 +250,8 @@ def test_malformed_model_form_falls_back_without_losing_confirmed_values(
     assert payload["draft_patch"]["name"] == "Should we launch the new homepage"
     assert payload["missing_fields"] == ["guardrails"]
     assert payload["blocks"][0]["fields"][0]["id"] == "guardrails"
-    assert "没有丢失" in payload["message"]
+    assert "your confirmed inputs were preserved" in payload["message"]
+    assert not _cjk(payload["message"])
 
 
 def test_invalid_provider_json_falls_back_without_an_unhandled_500(
@@ -272,9 +281,31 @@ def test_invalid_provider_json_falls_back_without_an_unhandled_500(
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert "没有丢失" in payload["message"]
+    assert "your confirmed inputs were preserved" in payload["message"]
     assert payload["blocks"]
     assert payload["next_action"] == "collect"
+    block = payload["blocks"][0]
+    generated_copy = " ".join(
+        str(value)
+        for value in (
+            payload["message"],
+            block["title"],
+            block.get("description"),
+            block["submit_label"],
+            *(
+                item
+                for field in block["fields"]
+                for item in (
+                    field["label"],
+                    field.get("placeholder"),
+                    field.get("helper_text"),
+                    field.get("suggestion_basis"),
+                )
+            ),
+        )
+        if value is not None
+    )
+    assert not _cjk(generated_copy), generated_copy
 
 
 def test_guardrail_form_is_always_presented_as_natural_language(
@@ -358,7 +389,8 @@ def test_guardrail_form_is_always_presented_as_natural_language(
     assert field["control"] == "textarea"
     assert field["options"] == []
     assert "JSON" not in visible_copy
-    assert "自然语言" in visible_copy
+    assert "ordinary language" in visible_copy
+    assert not _cjk(visible_copy), visible_copy
 
 
 def test_agent_converts_natural_language_guardrails_to_structured_rules(
@@ -527,4 +559,86 @@ def test_malformed_model_fallback_adds_contextual_text_and_numeric_suggestions(
     assert [field["id"] for field in fields] == ["primary_direction", "success_threshold"]
     assert fields[0]["suggested_value"] == "decrease"
     assert fields[1]["suggested_value"] == "0.01"
-    assert "规划假设" in fields[1]["suggestion_basis"]
+    assert "Planning assumption" in fields[1]["suggestion_basis"]
+    assert not _cjk(fields[1]["suggestion_basis"])
+
+
+def test_intake_boundary_normalizes_any_requested_locale_to_english() -> None:
+    request = agent_module.AgentTurnRequest.model_validate(
+        {
+            "messages": [{"role": "user", "content": "我想评估新引导流程。"}],
+            "draft": {"mode": "prospective"},
+            "captured_fields": ["mode"],
+            "locale": "zh-CN",
+        }
+    )
+
+    assert request.locale == "en"
+    state = agent_module._compose_model_messages(request)[-1]["content"]
+    assert "Interface locale: en" in state
+    assert "reply in English" in state
+    assert "Always reply in English" in agent_module.SYSTEM_PROMPT
+    assert not _cjk(agent_module.SYSTEM_PROMPT)
+
+
+def test_chinese_answers_are_interpreted_but_generated_copy_stays_english(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        agent_module,
+        "_safe_model_call",
+        lambda **_: {
+            "message": "broken",
+            "draft_patch": {},
+            "blocks": [{"type": "form", "id": "broken", "fields": []}],
+        },
+    )
+    draft = {
+        "mode": "prospective",
+        "business_question": "Should the new flow reduce the 次日留存率 drop?",
+        "hypothesis": "新引导流程会降低流失。",
+        "population": "New users",
+        "intervention": "Guided onboarding",
+        "comparison": "Current onboarding",
+        "primary_metric": "次日留存率",
+        "metric_type": "binary",
+    }
+
+    response = client.post(
+        "/api/agent/intake",
+        headers={"X-DeepSeek-API-Key": "test-key"},
+        json={
+            "messages": [{"role": "user", "content": "主指标是次日留存率。"}],
+            "draft": draft,
+            "captured_fields": list(draft),
+            "locale": "zh-CN",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    block = payload["blocks"][0]
+    generated_copy = " ".join(
+        str(value)
+        for value in (
+            payload["message"],
+            block["title"],
+            block.get("description"),
+            *(
+                item
+                for field in block["fields"]
+                for item in (
+                    field["label"],
+                    field.get("placeholder"),
+                    field.get("helper_text"),
+                    field.get("suggestion_basis"),
+                )
+            ),
+        )
+        if value is not None
+    )
+    assert not _cjk(generated_copy), generated_copy
+    # The user's own wording is study data and must survive the English-only boundary.
+    assert payload["draft_patch"]["name"] == "Should the new flow reduce the 次日留存率 drop"
+    assert "primary_metric" not in payload["missing_fields"]

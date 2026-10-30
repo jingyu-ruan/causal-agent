@@ -21,54 +21,21 @@ import { cn } from "@/lib/utils"
 
 type FormValue = string | string[]
 
-function normalizeCausalTerms(text: string): string {
-  return text.replaceAll("双差分", "双重差分")
-}
-
+/** Generated forms are presented in English; guardrail copy is application-owned. */
 function humanFacingBlock(block: AgentFormBlock): AgentFormBlock {
-  const normalized: AgentFormBlock = {
-    ...block,
-    title: normalizeCausalTerms(block.title),
-    description: block.description ? normalizeCausalTerms(block.description) : block.description,
-    submit_label: normalizeCausalTerms(block.submit_label),
-    fields: block.fields.map((field) => ({
-      ...field,
-      label: normalizeCausalTerms(field.label),
-      placeholder: field.placeholder ? normalizeCausalTerms(field.placeholder) : field.placeholder,
-      helper_text: field.helper_text ? normalizeCausalTerms(field.helper_text) : field.helper_text,
-      suggestion_basis: field.suggestion_basis ? normalizeCausalTerms(field.suggestion_basis) : field.suggestion_basis,
-      options: field.options.map((option) => ({
-        ...option,
-        label: normalizeCausalTerms(option.label),
-        description: option.description ? normalizeCausalTerms(option.description) : option.description,
-      })),
-    })),
+  if (!block.fields.some((field) => field.id === "guardrails")) return block
+  const copy = {
+    title: "Guardrail outcomes",
+    description: "Describe which outcomes must not worsen and by how much. The Agent will convert your answer into structured rules.",
+    label: "Which guardrail outcomes should be monitored?",
+    placeholder: "For example: conversion rate must not fall by more than 1 percentage point; crash rate must not rise by more than 0.2 percentage points. Enter “none” if no guardrails are needed.",
+    helper: "You can describe several outcomes at once. No special format is required.",
   }
-  if (!normalized.fields.some((field) => field.id === "guardrails")) return normalized
-  const sourceCopy = [normalized.title, normalized.description, ...normalized.fields.flatMap((field) => [field.label, field.placeholder, field.helper_text])]
-    .filter(Boolean)
-    .join(" ")
-  const chinese = /[\u3400-\u9fff]/u.test(sourceCopy)
-  const copy = chinese
-    ? {
-        title: "护栏指标",
-        description: "直接描述哪些指标不能恶化，以及最多可接受多大变化。Agent 会将描述转换为结构化规则。",
-        label: "需要监控哪些护栏指标？",
-        placeholder: "例如：支付转化率不能下降超过 1 个百分点；崩溃率不能上升超过 0.2 个百分点。若无需护栏，输入“无”。",
-        helper: "可以一次描述多个指标，无需使用特殊格式。",
-      }
-    : {
-        title: "Guardrail outcomes",
-        description: "Describe which outcomes must not worsen and by how much. The Agent will convert your answer into structured rules.",
-        label: "Which guardrail outcomes should be monitored?",
-        placeholder: "For example: conversion rate must not fall by more than 1 percentage point; crash rate must not rise by more than 0.2 percentage points. Enter “none” if no guardrails are needed.",
-        helper: "You can describe several outcomes at once. No special format is required.",
-      }
   return {
-    ...normalized,
-    title: normalized.fields.length === 1 ? copy.title : normalized.title,
+    ...block,
+    title: block.fields.length === 1 ? copy.title : block.title,
     description: copy.description,
-    fields: normalized.fields.map((field) => field.id === "guardrails"
+    fields: block.fields.map((field) => field.id === "guardrails"
       ? {
           ...field,
           label: copy.label,
@@ -154,8 +121,7 @@ function visibleValue(field: AgentField, value: FormValue | undefined) {
     .filter(Boolean)
     .map((item) => {
       const label = field.options.find((option) => option.value === item)?.label
-      const visibleLabel = label ? normalizeCausalTerms(label) : label
-      return visibleLabel && visibleLabel !== item ? `${visibleLabel} [${item}]` : normalizeCausalTerms(item)
+      return label && label !== item ? `${label} [${item}]` : item
     })
     .join(", ")
 }

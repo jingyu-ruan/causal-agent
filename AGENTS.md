@@ -10,6 +10,29 @@ Use spacing, alignment, grouping and restrained typography to establish hierarch
 Remove redundant subtitles, helper descriptions and decorative labels. Retain text
 that conveys business context, units, evidence limitations or consequential choices.
 
+## Interface language
+
+The user's standing instruction is that the product interface is English-only.
+Every authored string and every assistant-generated interface response must be
+English: agent messages, form titles, descriptions, labels, placeholders, helper
+text, option labels, suggestion bases, recovery forms and reference evidence
+answers, whatever language the user writes in.
+
+Input recognition is unchanged. Intake and evidence questions are still
+interpreted in Chinese, `lib/column-mapping.ts` still matches Chinese metric and
+column terms, and user-supplied text — a research question, a metric name, an
+imported column name, a stored conversation — is study data. Display and store
+it verbatim. Never blank, strip or regex-rewrite Chinese user content.
+
+The intake locale is fixed, not detected. `INTERFACE_LOCALE` in
+`frontend/lib/agent-api.ts` is its only source, the browser language is never
+read, and `POST /api/agent/intake` normalizes any requested locale to `en` before
+composing the prompt or a deterministic recovery form. Both intake system prompts
+(`backend/agent.py` and `frontend/lib/openrouter-contract.ts`) require English
+replies. Do not add a translation framework or a language toggle. See the
+[interface language section](docs/frontend-design-sop.md#interface-language--2026-10-29)
+of the SOP before changing generated copy.
+
 ## Analysis reports
 
 Reports should look formal and use compact, consistent typography. Avoid oversized

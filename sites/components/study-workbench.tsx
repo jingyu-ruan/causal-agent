@@ -40,6 +40,7 @@ import { normalizeEvidence, type NormalizedEvidence } from "@/components/study-e
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  INTERFACE_LOCALE,
   runIntakeAgent,
   toAgentDraft,
   type AgentDraft,
@@ -175,10 +176,6 @@ type ConversationSnapshot = Record<string, unknown> & {
 }
 
 const OPENING_MESSAGE_ID = "agent-opening"
-
-function normalizeCausalTerms(text: string): string {
-  return text.replaceAll("双差分", "双重差分")
-}
 
 function openingMessage(): ChatMessage {
   return {
@@ -490,7 +487,7 @@ export function StudyWorkbench() {
 
   const appendAgent = (text: string, kind: MessageKind = "text", blocks: AgentFormBlock[] = []) => {
     const id = nextMessageId("agent")
-    setMessages((current) => [...current, { id, role: "agent", text: normalizeCausalTerms(text), kind, blocks }])
+    setMessages((current) => [...current, { id, role: "agent", text, kind, blocks }])
     setActiveFormMessageId(blocks.length ? id : null)
     return id
   }
@@ -555,7 +552,7 @@ export function StudyWorkbench() {
         draft: toAgentDraft(base?.draft ?? input),
         captured_fields: base?.captured ?? capturedFields,
         model: settings.model,
-        locale: typeof navigator === "undefined" ? "en" : navigator.language.split("-").slice(0, 2).join("-"),
+        locale: INTERFACE_LOCALE,
       }
     }
 
@@ -1321,7 +1318,7 @@ function ConversationMessage({
   }
 
   const agent = message.role === "agent"
-  const displayText = normalizeCausalTerms(message.text)
+  const displayText = message.text
 
   const copyMessage = async () => {
     try {
@@ -1576,14 +1573,8 @@ function normalizeRestoredConversation(
   const activityById = new Map(normalizedActivities.map((activity) => [activity.id, activity]))
   const normalizedMessages: ChatMessage[] = []
 
-  messages.forEach((sourceMessage, index) => {
-    if (sourceMessage.activityId && skippedActivityIds.has(sourceMessage.activityId)) return
-    const message = sourceMessage.role === "user" && sourceMessage.text.startsWith("Form response")
-      ? {
-          ...sourceMessage,
-          text: sourceMessage.text.replace(/护栏指标\s*[（(]JSON\s*数组或[“"]无[”"][）)]/gu, "护栏指标"),
-        }
-      : sourceMessage
+  messages.forEach((message, index) => {
+    if (message.activityId && skippedActivityIds.has(message.activityId)) return
     normalizedMessages.push(message)
 
     if (!message.activityId) return

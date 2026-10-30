@@ -1,4 +1,4 @@
-import type { AgentDraft, AgentDraftField, AgentHistoryMessage, AgentTurnResponse } from "@/lib/agent-api"
+import { INTERFACE_LOCALE, type AgentDraft, type AgentDraftField, type AgentHistoryMessage, type AgentTurnResponse } from "@/lib/agent-api"
 import { missingOpenRouterFields, OPENROUTER_SYSTEM_PROMPT, validateOpenRouterTurn } from "./openrouter-contract"
 
 type OpenRouterIntake = { messages: AgentHistoryMessage[]; draft: AgentDraft; captured_fields: AgentDraftField[]; locale: string }
@@ -10,7 +10,7 @@ export async function runOpenRouterIntake(payload: OpenRouterIntake, apiKey: str
   const messages = [
     { role: "system", content: OPENROUTER_SYSTEM_PROMPT },
     ...payload.messages.slice(-24),
-    { role: "user", content: `APPLICATION STATE\nRequested locale: ${payload.locale}\nConfirmed draft JSON: ${JSON.stringify(Object.fromEntries(Object.entries(payload.draft).filter(([key]) => captured.has(key as AgentDraftField))))}\nCurrently missing fields: ${JSON.stringify(missingOpenRouterFields(payload.draft, captured))}\nAnalyze the conversation and return the next JSON response.` },
+    { role: "user", content: `APPLICATION STATE\nRequested locale: ${INTERFACE_LOCALE}\nConfirmed draft JSON: ${JSON.stringify(Object.fromEntries(Object.entries(payload.draft).filter(([key]) => captured.has(key as AgentDraftField))))}\nCurrently missing fields: ${JSON.stringify(missingOpenRouterFields(payload.draft, captured))}\nAnalyze the conversation and return the next JSON response.` },
   ]
   for (let attempt = 0; attempt < 2; attempt++) {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
